@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
-
 const SIGN_NAMES = {
   aries: 'Aries', tauro: 'Tauro', geminis: 'Géminis', cancer: 'Cáncer',
   leo: 'Leo', virgo: 'Virgo', libra: 'Libra', escorpio: 'Escorpio',
@@ -28,24 +26,23 @@ export default async function handler(req, res) {
   const token = authHeader.replace('Bearer ', '')
   if (!token) return res.status(401).json({ error: 'Falta token' })
 
-  const supabase = createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
+  const SUPABASE_URL = process.env.VITE_SUPABASE_URL
+  const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY
+
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: ANON_KEY },
+  })
+  if (!userRes.ok) return res.status(401).json({ error: 'Token inválido' })
+  const user = await userRes.json()
+
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=chart,ai_reading`,
+    { headers: { Authorization: `Bearer ${token}`, apikey: ANON_KEY } }
   )
+  const profiles = await profileRes.json()
+  const profile = profiles?.[0]
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token)
-  if (userError || !user) return res.status(401).json({ error: 'Token inválido' })
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('chart, ai_reading')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (profileError || !profile?.chart) {
-    return res.status(400).json({ error: 'Perfil sin carta astral' })
-  }
+  if (!profile?.chart) return res.status(400).json({ error: 'Perfil sin carta astral' })
 
   if (profile.ai_reading) {
     return res.status(200).json({ reading: profile.ai_reading, cached: true })
@@ -71,10 +68,16 @@ export default async function handler(req, res) {
   const reading = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
   if (!reading) return res.status(502).json({ error: 'Respuesta vacía de Gemini' })
 
-  await supabase
-    .from('profiles')
-    .update({ ai_reading: reading, ai_reading_at: new Date().toISOString() })
-    .eq('id', user.id)
+  await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: ANON_KEY,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({ ai_reading: reading, ai_reading_at: new Date().toISOString() }),
+  })
 
   return res.status(200).json({ reading, cached: false })
 }
