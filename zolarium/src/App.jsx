@@ -41,6 +41,8 @@ function AppScreens() {
   const [profile, setProfile] = useState(undefined) // undefined = cargando, null = no existe aún
   const [view, setView] = useState('menu')
   const [editing, setEditing] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState(null)
 
   useEffect(() => {
     if (!session) {
@@ -216,6 +218,23 @@ function AppScreens() {
           })}
         </div>
 
+        <div className="mt-8">
+          {profile.ai_reading ? (
+            <div className="card-zolar rounded-2xl p-4 text-sm leading-relaxed whitespace-pre-line">
+              {profile.ai_reading}
+            </div>
+          ) : (
+            <button
+              onClick={handleAiReading}
+              disabled={aiLoading}
+              className="w-full rounded-xl p-3 text-center font-semibold"
+              style={{ background: 'linear-gradient(135deg, #F4913F, #9D7295)' }}
+            >
+              {aiLoading ? 'Consultando las estrellas...' : '✨ Leer mi carta con IA'}
+            </button>
+          )}
+          {aiError && <p className="text-sm text-red-400 mt-2 text-center">{aiError}</p>}
+        </div>
         {!user.chart.moon && (
           <p className="text-sm text-zolar-rose/60 mt-6 text-center">
             Añade hora y lugar de nacimiento para desbloquear tu carta completa.
@@ -223,6 +242,24 @@ function AppScreens() {
         )}
       </div>
     )
+  }
+
+  async function handleAiReading() {
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/reading', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error generando la lectura')
+      setProfile(prev => ({ ...prev, ai_reading: data.reading }))
+    } catch (e) {
+      setAiError(e.message)
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   return <Menu user={user} onSelect={setView} />

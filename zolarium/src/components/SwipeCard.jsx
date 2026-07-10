@@ -30,7 +30,8 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
   const nopeOpacity = useTransform(x, [-120, -40], [1, 0])
 
   const s = SIGNS[sign]
-  const votes = 0
+  const total = plan.votes_total || 0
+  const pct = plan.votes_pct || 0
 
   return (
     <motion.div
@@ -84,9 +85,15 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
         </div>
 
         <div className="flex flex-col gap-3">
-          <div className="card-zolar rounded-xl p-3 text-center text-sm text-zolar-rose/80">
-            🌱 {votes}/{MIN_VOTES} {s.name} han opinado. Sé de los primeros.
-          </div>
+          {total >= MIN_VOTES ? (
+            <div className="card-zolar rounded-xl p-3 text-center text-sm text-zolar-rose/80">
+              ✨ {pct}% de {s.name} aman este plan
+            </div>
+          ) : (
+            <div className="card-zolar rounded-xl p-3 text-center text-sm text-zolar-rose/80">
+              🌱 {total}/{MIN_VOTES} {s.name} han opinado. Sé de los primeros.
+            </div>
+          )}
           <div className="flex justify-between items-center text-sm gap-2">
             <a
               href={mapsUrl(plan)}

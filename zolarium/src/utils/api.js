@@ -104,7 +104,13 @@ export async function fetchDeck(_sign, mode = 'planes') {
     return { plan, planVectorArr, score }
   })
 
-  return buildDeck(scored, effVector, { size: DECK.size })
+  const deck = buildDeck(scored, effVector, { size: DECK.size })
+  return deck.map(plan => {
+    const stat = planStatsById[plan.id]
+    const total = (stat?.likes || 0) + (stat?.dislikes || 0)
+    const pct = total > 0 ? Math.round((stat.likes / total) * 100) : 0
+    return { ...plan, votes_total: total, votes_pct: pct }
+  })
 }
 
 export async function fetchSaved() {
