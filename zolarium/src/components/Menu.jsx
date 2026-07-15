@@ -12,6 +12,7 @@ const OPTIONS = [
   { id: 'guardados', emoji: '💜', title: 'Mis guardados', desc: 'Tus planes favoritos' },
   { id: 'carta', emoji: '🌌', title: 'Mi carta astral', desc: 'Tu perfil cósmico' },
   { id: 'garden', emoji: '🌱', title: 'Jardín zodiacal', desc: 'Visita a tu mascota' },
+  { id: 'mapa', emoji: '🗺️', title: 'Mapa astral de Madrid', desc: 'Todos los planes por signo' },
 ]
 
 export default function Menu({ user, onSelect }) {

@@ -1,0 +1,32 @@
+name: Zolarium sync
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: zolarium
+      - name: Sync agenda Madrid (semanal)
+        if: github.event.schedule != '0 6 1 * *'
+        run: node scripts/sync.js
+        working-directory: zolarium
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}
+      - name: Sync ocio urbano OSM (mensual)
+        if: github.event.schedule == '0 6 1 * *' || github.event_name == 'workflow_dispatch'
+        run: node scripts/sync-ocio.js
+        working-directory: zolarium
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET: ${{ secrets.SUPABASE_SECRET }}

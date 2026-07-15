@@ -14,10 +14,7 @@ const DATASETS = [
   { slug: '206974-0-agenda-eventos-culturales-100', type: 'evento', fallbackCategory: 'exposiciones', fallbackElement: 'aire' },
   { slug: '300107-0-agenda-actividades-eventos', type: 'evento', fallbackCategory: 'talleres', fallbackElement: 'aire' },
   { slug: '206717-0-agenda-eventos-bibliotecas', type: 'evento', fallbackCategory: 'conferencias', fallbackElement: 'aire' },
-  { slug: '300356-0-monumentos-ciudad-madrid', type: 'lugar', fallbackCategory: 'monumentos', fallbackElement: 'aire' },
-  { slug: '200761-0-parques-jardines', type: 'lugar', fallbackCategory: 'naturaleza-paseos', fallbackElement: 'tierra' },
   { slug: '202105-0-mercadillos', type: 'lugar', fallbackCategory: 'mercadillos', fallbackElement: 'tierra' },
-  { slug: '209426-0-templos-catolicas', type: 'lugar', fallbackCategory: 'templos', fallbackElement: 'agua' },
 ]
 
 const CATEGORY_PATTERNS = [
@@ -76,9 +73,17 @@ function pickEmoji(text, element) {
   return EMOJIS[element]
 }
 
+const ENTITIES = { aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', ntilde: 'ñ', Ntilde: 'Ñ', uuml: 'ü', Uuml: 'Ü', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', iexcl: '¡', iquest: '¿', ordf: 'ª', ordm: 'º', nbsp: ' ' }
+
+function decodeEntities(str) {
+  return str
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&([a-zA-Z]+);/g, (m, name) => ENTITIES[name] ?? m)
+}
+
 function clean(str, max = 300) {
   if (!str) return null
-  return String(str).replace(/\s+/g, ' ').trim().slice(0, max)
+  return decodeEntities(decodeEntities(String(str))).replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
 async function syncDataset({ slug, type, fallbackCategory, fallbackElement }) {

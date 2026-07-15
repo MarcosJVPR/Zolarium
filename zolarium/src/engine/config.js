@@ -56,6 +56,7 @@ export const CATEGORY_ARCHETYPES = {
   'monumentos':        { sage: 0.40, creator: 0.30, ruler: 0.30 },
   'mercadillos':       { everyman: 0.40, lover: 0.30, explorer: 0.30 },
   'templos':           { magician: 0.40, innocent: 0.30, sage: 0.30 },
+  'ocio-urbano':       { hero: 0.35, jester: 0.35, explorer: 0.30 },
 }
 
 export const CATEGORY_FALLBACK = { everyman: 0.5, explorer: 0.5 }

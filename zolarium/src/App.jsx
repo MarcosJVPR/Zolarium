@@ -6,6 +6,7 @@ import Menu from './components/Menu'
 import PlanDeck from './components/PlanDeck'
 import Saved from './components/Saved'
 import ZodiacGarden from './components/ZodiacGarden'
+import MapView from './components/MapView'
 import ZolariumZ from './components/ZolariumZ'
 import StarField from './components/StarField'
 import { supabase } from './utils/supabase'
@@ -119,6 +120,7 @@ function AppScreens() {
 
   if (view === 'guardados') return <Saved onBack={() => setView('menu')} />
   if (view === 'garden') return <ZodiacGarden sign={user.chart.sun} onBack={() => setView('menu')} />
+  if (view === 'mapa') return <MapView onBack={() => setView('menu')} />
 
   if (view === 'astro') {
     return (
