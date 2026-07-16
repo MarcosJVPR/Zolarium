@@ -85,7 +85,7 @@ function clusterIcon(count) {
   const size = count >= 100 ? 52 : count >= 25 ? 44 : 38
   return L.divIcon({
     className: '',
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,#F4913F,#9D7295);border:2px solid rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;box-shadow:0 2px 12px rgba(0,0,0,0.5)">${count}</div>`,
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,#FF8A00,#FF2DA1);border:2px solid rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;box-shadow:0 2px 14px rgba(255,45,161,0.55)">${count}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   })
@@ -194,10 +194,10 @@ export default function MapView({ onBack }) {
 
       <div className="absolute top-0 inset-x-0 pt-6" style={{ zIndex: 1000 }}>
         <div className="px-5 flex items-center justify-between">
-          <button onClick={onBack} className="text-white/90 text-sm bg-black/50 backdrop-blur rounded-full px-4 py-2">
+          <button onClick={onBack} className="text-white/90 text-sm bubble-glass rounded-full px-4 py-2">
             ← Volver
           </button>
-          <div className="bg-black/50 backdrop-blur rounded-full px-4 py-2 text-sm text-white/90">
+          <div className="bubble-glass rounded-full px-4 py-2 text-sm text-white/90">
             {filtered.length} planes
           </div>
         </div>
@@ -209,12 +209,7 @@ export default function MapView({ onBack }) {
                 setCat(c.key)
                 setSelected(null)
               }}
-              className="shrink-0 text-sm rounded-full px-4 py-2 backdrop-blur transition-colors"
-              style={{
-                background: cat === c.key ? 'linear-gradient(135deg, #F4913F, #9D7295)' : 'rgba(0,0,0,0.5)',
-                color: '#fff',
-                fontWeight: cat === c.key ? 700 : 400,
-              }}
+              className={`shrink-0 text-sm rounded-full px-4 py-2 text-white transition-all ${cat === c.key ? 'cta-zolar font-bold' : 'bubble-glass'}`}
             >
               {c.label}
             </button>
@@ -233,48 +228,71 @@ export default function MapView({ onBack }) {
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
             <div
-              className="card-zolar rounded-3xl p-4 shadow-2xl backdrop-blur-xl relative"
-              style={{ borderTop: `4px solid ${s.color}`, background: 'rgba(47,33,51,0.92)' }}
+              className="rounded-[28px] shadow-2xl backdrop-blur-xl relative overflow-hidden"
+              style={{
+                background: 'rgba(28,20,32,0.92)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                boxShadow: `0 -4px 40px ${s.color}55, 0 20px 40px rgba(0,0,0,0.5)`,
+              }}
             >
+              {selected.image_url && (
+                <div className="relative h-32 w-full">
+                  <img
+                    src={selected.image_url}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={e => { e.currentTarget.parentElement.style.display = 'none' }}
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: 'linear-gradient(to top, rgba(28,20,32,0.95) 0%, rgba(28,20,32,0.25) 55%, transparent 100%)' }}
+                  />
+                </div>
+              )}
+
               <button
                 onClick={() => setSelected(null)}
-                className="absolute top-3 right-4 text-white/60 text-xl"
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bubble-glass text-white/80 text-sm z-10"
                 aria-label="Cerrar"
               >
                 ✕
               </button>
-              <div className="flex items-start gap-3">
-                <div className="shrink-0">
-                  <Mascot sign={selected.sign} size={64} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs mb-0.5" style={{ color: s.soft }}>
-                    {s.symbol} Plan muy {s.name}
-                  </p>
-                  <h3 className="font-bold font-display leading-tight pr-6 text-sm">{selected.title}</h3>
-                  {selected.event_date && (
-                    <p className="text-xs text-zolar-rose/70 mt-0.5">
-                      📅 {selected.event_date.slice(8, 10)}/{selected.event_date.slice(5, 7)}
+
+              <div className="p-4" style={{ marginTop: selected.image_url ? '-2.75rem' : 0, position: 'relative' }}>
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 bubble-glass rounded-full p-1.5">
+                    <Mascot sign={selected.sign} size={58} />
+                  </div>
+                  <div className="min-w-0 pt-1">
+                    <p className="text-xs mb-0.5 font-semibold" style={{ color: s.soft, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+                      {s.symbol} Plan muy {s.name}
                     </p>
-                  )}
+                    <h3 className="font-bold font-display leading-tight pr-6 text-sm" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+                      {selected.title}
+                    </h3>
+                    {selected.event_date && (
+                      <p className="text-xs text-zolar-rose/70 mt-0.5">
+                        📅 {selected.event_date.slice(8, 10)}/{selected.event_date.slice(5, 7)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              {selected.description && (
-                <p className="text-xs text-zolar-rose/80 mt-2 line-clamp-2">{truncate(selected.description)}</p>
-              )}
-              <div className="flex items-center justify-between mt-3 gap-3">
-                <span className="text-xs text-zolar-rose/60 truncate">
-                  📍 {selected.neighborhood || selected.address || 'Madrid'}
-                </span>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lon}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 text-xs font-semibold rounded-xl px-3 py-2 text-white"
-                  style={{ background: 'linear-gradient(135deg, #F4913F, #9D7295)' }}
-                >
-                  Cómo llegar
-                </a>
+                {selected.description && (
+                  <p className="text-xs text-zolar-rose/80 mt-2 line-clamp-2">{truncate(selected.description)}</p>
+                )}
+                <div className="flex items-center justify-between mt-3 gap-3">
+                  <span className="text-xs text-zolar-rose/60 truncate">
+                    📍 {selected.neighborhood || selected.address || 'Madrid'}
+                  </span>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lon}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-xs font-semibold rounded-full px-4 py-2 cta-zolar"
+                  >
+                    Cómo llegar
+                  </a>
+                </div>
               </div>
             </div>
           </motion.div>
