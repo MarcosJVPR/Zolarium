@@ -86,7 +86,53 @@ function clean(str, max = 300) {
   return decodeEntities(decodeEntities(String(str))).replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
-async function syncDataset({ slug, type, fallbackCategory, fallbackElement }) {
+async function fetchWithTimeout(url, ms = 8000) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), ms)
+  try {
+    return await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Zolarium/1.0 (https://zolarium.vercel.app)' } })
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+function extractOgImage(html) {
+  const m =
+    html.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i)
+  if (!m) return null
+  const url = m[1].trim()
+  if (!/^https?:\/\//.test(url)) return null
+  return url.slice(0, 500)
+}
+
+async function scrapeImages(queue) {
+  if (!queue.length) {
+    console.log('🖼️ Sin páginas nuevas que rastrear')
+    return
+  }
+  console.log(`🖼️ Buscando og:image en ${queue.length} páginas...`)
+  let found = 0
+  const CONCURRENCY = 5
+  for (let i = 0; i < queue.length; i += CONCURRENCY) {
+    const batch = queue.slice(i, i + CONCURRENCY)
+    await Promise.all(batch.map(async item => {
+      try {
+        const res = await fetchWithTimeout(item.url)
+        if (!res.ok) return
+        const html = (await res.text()).slice(0, 400000)
+        const img = extractOgImage(html)
+        if (!img) return
+        const { error } = await db.from('plans').update({ image_url: img }).eq('source_id', item.source_id)
+        if (!error) found += 1
+      } catch { }
+    }))
+    if (i % 100 === 0 && i > 0) console.log(`   ...${i}/${queue.length}`)
+  }
+  console.log(`🖼️ Imágenes guardadas: ${found}`)
+}
+
+async function syncDataset({ slug, type, fallbackCategory, fallbackElement }, imageQueue, existingImages) {
   const url = `https://datos.madrid.es/egob/catalogo/${slug}.json`
   console.log(`\n📡 ${slug}`)
 
@@ -124,8 +170,14 @@ async function syncDataset({ slug, type, fallbackCategory, fallbackElement }) {
     })
     const practical = derivePracticalFeatures({ title, description, isFree: false })
 
+    const sourceId = String(item.id || item['@id'] || `${slug}-${title}`)
+    const pageUrl = typeof item.link === 'string' ? item.link : null
+    if (pageUrl && /^https?:\/\//.test(pageUrl) && !existingImages.has(sourceId)) {
+      imageQueue.push({ source_id: sourceId, url: pageUrl })
+    }
+
     rows.push({
-      source_id: String(item.id || item['@id'] || `${slug}-${title}`),
+      source_id: sourceId,
       title,
       description,
       element,
@@ -162,16 +214,39 @@ async function syncDataset({ slug, type, fallbackCategory, fallbackElement }) {
 }
 
 async function main() {
-  console.log('🌟 Zolarium sync v2 — datos.madrid.es (CC BY 4.0)')
-  for (const ds of DATASETS) await syncDataset(ds)
+  console.log('🌟 Zolarium sync v3 — datos.madrid.es (CC BY 4.0) + og:image')
+
+  const existingImages = new Set()
+  let from = 0
+  for (;;) {
+    const { data, error } = await db
+      .from('plans')
+      .select('source_id')
+      .not('image_url', 'is', null)
+      .range(from, from + 999)
+    if (error || !data?.length) break
+    for (const r of data) existingImages.add(r.source_id)
+    if (data.length < 1000) break
+    from += 1000
+  }
+  console.log(`🖼️ Ya con imagen: ${existingImages.size}`)
+
+  const imageQueue = []
+  for (const ds of DATASETS) await syncDataset(ds, imageQueue, existingImages)
+
+  await scrapeImages(imageQueue)
 
   const { count: total } = await db.from('plans').select('*', { count: 'exact', head: true })
   const { count: tagged } = await db
     .from('plans')
     .select('*', { count: 'exact', head: true })
     .not('archetype_vector', 'is', null)
+  const { count: withImage } = await db
+    .from('plans')
+    .select('*', { count: 'exact', head: true })
+    .not('image_url', 'is', null)
 
-  console.log(`\n🎉 Total: ${total} | Con vector arquetípico: ${tagged}`)
+  console.log(`\n🎉 Total: ${total} | Con vector: ${tagged} | Con foto: ${withImage}`)
 }
 
 main()

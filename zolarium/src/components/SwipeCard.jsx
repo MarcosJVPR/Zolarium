@@ -23,22 +23,28 @@ function calendarUrl(plan) {
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${d}/${d2}&details=${details}`
 }
 
-export default function SwipeCard({ plan, sign, onSwipe }) {
+export default function SwipeCard({ plan, sign, onSwipe, canInvite = false, onInviteDrop, onDragY }) {
   const x = useMotionValue(0)
+  const y = useMotionValue(0)
   const rotate = useTransform(x, [-200, 200], [-15, 15])
+  const scale = useTransform(y, [-200, -50, 0], [0.45, 0.94, 1])
   const likeOpacity = useTransform(x, [40, 120], [0, 1])
   const nopeOpacity = useTransform(x, [-120, -40], [1, 0])
+  const inviteHint = useTransform(y, [-140, -50], [1, 0])
 
   const s = SIGNS[sign]
+  const matchSign = plan.match_sign ? SIGNS[plan.match_sign] : null
   const total = plan.votes_total || 0
   const pct = plan.votes_pct || 0
 
   return (
     <motion.div
       className="absolute inset-0"
-      style={{ x, rotate }}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
+      style={{ x, y, rotate, scale }}
+      drag
+      dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+      dragElastic={{ left: 0.5, right: 0.5, top: canInvite ? 0.55 : 0.12, bottom: 0.12 }}
+      dragSnapToOrigin
       initial={{ scale: 0.95, opacity: 0, y: 12 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
       variants={{
@@ -50,13 +56,23 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
         }),
       }}
       exit="exit"
-      onDragEnd={(_, info) => {
+      onDrag={(e, info) => {
+        if (canInvite) onDragY?.(info.offset.y)
+      }}
+      onDragEnd={(e, info) => {
+        onDragY?.(0)
+        const px = e.clientX ?? e.changedTouches?.[0]?.clientX
+        const py = e.clientY ?? e.changedTouches?.[0]?.clientY
+        if (canInvite && info.offset.y < -110 && Math.abs(info.offset.x) < 90) {
+          if (px != null && py != null) onInviteDrop?.(px, py, plan)
+          return
+        }
         if (info.offset.x > 100) onSwipe('like')
         else if (info.offset.x < -100) onSwipe('dislike')
       }}
     >
       <div
-        className="h-full rounded-[28px] p-4 flex flex-col justify-between shadow-2xl overflow-hidden"
+        className="h-full rounded-[28px] p-4 flex flex-col shadow-2xl overflow-hidden"
         style={{
           background: 'rgba(28,20,32,0.88)',
           border: '1px solid rgba(255,255,255,0.14)',
@@ -76,9 +92,19 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
         >
           PASO
         </motion.div>
+        {canInvite && (
+          <motion.div
+            style={{ opacity: inviteHint }}
+            className="absolute top-2 inset-x-0 z-10 flex justify-center pointer-events-none"
+          >
+            <span className="bubble-glass rounded-full px-4 py-1.5 text-xs font-semibold text-white">
+              ✨ Suéltala sobre un Zol para invitarle
+            </span>
+          </motion.div>
+        )}
 
-        <div className="overflow-hidden flex flex-col min-h-0">
-          <div className="relative h-44 rounded-[20px] overflow-hidden shrink-0">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="relative h-36 rounded-[20px] overflow-hidden shrink-0">
             {plan.image_url ? (
               <>
                 <img
@@ -92,7 +118,7 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
                   className="absolute inset-0"
                   style={{ background: 'linear-gradient(to top, rgba(28,20,32,0.85) 0%, transparent 55%)' }}
                 />
-                <div className="absolute bottom-3 left-3 bubble-glass rounded-full w-11 h-11 flex items-center justify-center text-2xl">
+                <div className="absolute bottom-3 left-3 bubble-glass rounded-full w-10 h-10 flex items-center justify-center text-xl">
                   {plan.emoji}
                 </div>
               </>
@@ -102,24 +128,34 @@ export default function SwipeCard({ plan, sign, onSwipe }) {
                 style={{ background: `linear-gradient(135deg, #8A2BE2 0%, ${s.color} 55%, #FF2DA1 130%)` }}
               >
                 <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 20% 15%, rgba(255,255,255,0.30), transparent 45%)' }} />
-                <div className="bubble-glass rounded-full w-24 h-24 flex items-center justify-center text-5xl">
+                <div className="bubble-glass rounded-full w-20 h-20 flex items-center justify-center text-4xl">
                   {plan.emoji}
                 </div>
               </div>
             )}
+
+            {matchSign && (
+              <div
+                className="absolute bottom-3 right-3 bubble-glass rounded-full w-9 h-9 flex items-center justify-center text-base font-bold"
+                style={{ color: matchSign.soft, boxShadow: `0 0 12px ${matchSign.color}99` }}
+                title={matchSign.name}
+              >
+                {matchSign.symbol}
+              </div>
+            )}
           </div>
 
-          <h2 className="text-xl font-bold text-center font-display leading-tight mt-4 px-2">
+          <h2 className="text-lg font-bold text-center font-display leading-tight mt-3 px-2 shrink-0">
             {plan.title}
           </h2>
           {plan.description && (
-            <p className="text-zolar-rose/80 text-center mt-2 text-sm line-clamp-4 px-2">
+            <p className="text-zolar-rose/80 text-center mt-2 text-sm line-clamp-3 px-2 overflow-hidden">
               {plan.description}
             </p>
           )}
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 pt-3 shrink-0">
           {total >= MIN_VOTES ? (
             <div className="bubble-glass rounded-full px-4 py-2.5 text-center text-sm text-white/90">
               ✨ {pct}% de {s.name} aman este plan

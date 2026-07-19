@@ -1,13 +1,32 @@
-import { useState, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { SIGNS } from '../utils/zodiac'
 
 const SUFFIX = { neutral: '', feliz: '-feliz', come: '-come', duerme: '-duerme' }
 
-export default function Mascot({ sign, size = 120, state = 'neutral' }) {
-  const [failedStates, setFailedStates] = useState({})
-  const [allFailed, setAllFailed] = useState(false)
+export default function Mascot({ sign, size = 120, state = 'neutral', skin = null, float = true }) {
   const s = SIGNS[sign]
+
+  const sources = useMemo(() => {
+    const suf = SUFFIX[state] ?? ''
+    const list = []
+    if (skin) {
+      if (suf) list.push(`/mascotas/skins/${sign}-${skin}${suf}.png`)
+      list.push(`/mascotas/skins/${sign}-${skin}.png`)
+    }
+    if (suf) list.push(`/mascotas/${sign}${suf}.png`)
+    list.push(`/mascotas/${sign}.png`)
+    return list
+  }, [sign, skin, state])
+
+  const [srcIdx, setSrcIdx] = useState(0)
+  const [allFailed, setAllFailed] = useState(false)
+
+  useEffect(() => {
+    setSrcIdx(0)
+    setAllFailed(false)
+  }, [sources])
+
   if (!s) return null
 
   if (allFailed) {
@@ -28,19 +47,21 @@ export default function Mascot({ sign, size = 120, state = 'neutral' }) {
     )
   }
 
-  const effective = failedStates[state] ? 'neutral' : state
-  const src = `/mascotas/${sign}${SUFFIX[effective] ?? ''}.png`
+  const src = sources[srcIdx]
 
   return (
-    <div style={{ width: size, height: size, position: 'relative' }} className="zolar-mascot-float">
+    <div
+      style={{ width: size, height: size, position: 'relative' }}
+      className={float ? 'zolar-mascot-float' : ''}
+    >
       <AnimatePresence mode="popLayout">
         <motion.img
           key={src}
           src={src}
           alt={s.name}
           onError={() => {
-            if (effective === 'neutral') setAllFailed(true)
-            else setFailedStates(f => ({ ...f, [state]: true }))
+            if (srcIdx + 1 < sources.length) setSrcIdx(i => i + 1)
+            else setAllFailed(true)
           }}
           className="zolar-mascot-img"
           style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', inset: 0 }}

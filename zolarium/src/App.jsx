@@ -7,12 +7,19 @@ import PlanDeck from './components/PlanDeck'
 import Saved from './components/Saved'
 import ZodiacGarden from './components/ZodiacGarden'
 import MapView from './components/MapView'
+import Zoles from './components/Zoles'
+import Astro from './components/Astro'
+import AstroFeed from './components/AstroFeed'
+import BottomNav from './components/BottomNav'
 import ZolariumZ from './components/ZolariumZ'
 import StarField from './components/StarField'
 import { supabase } from './utils/supabase'
 import { migrateLocalDataToSupabase } from './utils/migrateLocalData'
 import { computeBaseVector, vectorToArray } from './engine/archetype.js'
 import { SIGNS } from './utils/zodiac'
+
+const NAV_VIEWS = ['planes', 'mapa', 'feed', 'zoles', 'menu']
+const PADDED_VIEWS = ['feed', 'zoles', 'menu']
 
 const PLANETS = [
   ['sun', '☀️ Sol', 'Tu identidad'],
@@ -26,7 +33,14 @@ const PLANETS = [
 ]
 
 function Back({ onClick }) {
-  return <button onClick={onClick} className="text-zolar-rose/70 mb-4">← Volver</button>
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center mb-4 text-sm text-white/90 bubble-glass rounded-full px-4 py-2"
+    >
+      ← Volver
+    </button>
+  )
 }
 
 function profileToUser(row) {
@@ -39,11 +53,20 @@ function profileToUser(row) {
 
 function AppScreens() {
   const { session, loading: authLoading, signOut } = useAuth()
-  const [profile, setProfile] = useState(undefined) // undefined = cargando, null = no existe aún
-  const [view, setView] = useState('menu')
+  const [profile, setProfile] = useState(undefined)
+  const [view, setView] = useState('planes')
+  const [mapCat, setMapCat] = useState('todos')
   const [editing, setEditing] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState(null)
+
+  useEffect(() => {
+    const m = window.location.pathname.match(/^\/invite\/([A-Za-z0-9]{4,10})/)
+    if (m) {
+      localStorage.setItem('zolar_invite', m[1].toUpperCase())
+      window.history.replaceState(null, '', '/')
+    }
+  }, [])
 
   useEffect(() => {
     if (!session) {
@@ -85,6 +108,52 @@ function AppScreens() {
     return () => { active = false }
   }, [session])
 
+  useEffect(() => {
+    const pending = localStorage.getItem('zolar_invite')
+    if (!pending || !session || !profile?.chart) return
+    supabase
+      .rpc('add_friend_by_code', { p_code: pending })
+      .then(() => setView('zoles'))
+      .finally(() => localStorage.removeItem('zolar_invite'))
+  }, [session, profile])
+
+  useEffect(() => {
+    if (view === 'carta' && profile?.chart && !profile.ai_reading && !aiLoading && !aiError) {
+      handleAiReading()
+    }
+  }, [view, profile])
+
+  async function handleAiReading() {
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/reading', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const raw = await res.text()
+      let data = null
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        data = null
+      }
+      if (!res.ok || !data?.reading) {
+        const detail = data?.error
+          ? data.error
+          : window.location.hostname === 'localhost' || window.location.hostname.includes('github')
+            ? 'Las funciones /api solo existen en Vercel: prueba la lectura en zolarium.vercel.app'
+            : `El servidor de lectura falló (HTTP ${res.status}). Revisa GEMINI_API_KEY en Vercel.`
+        throw new Error(detail)
+      }
+      setProfile(prev => ({ ...prev, ai_reading: data.reading }))
+    } catch (e) {
+      setAiError(e.message)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   if (authLoading) return null
   if (!session) return <AuthScreen />
   if (profile === undefined) return null
@@ -104,55 +173,61 @@ function AppScreens() {
             chart: u.chart,
             archetype_vector: vectorToArray(vector),
             chart_type: chartType,
-            archetype_vector: vectorToArray(vector),
-            chart_type: chartType,
+            ai_reading: null,
+            ai_reading_at: null,
           }
           await supabase.from('profiles').upsert(row)
-          setProfile(row)
+          setAiError(null)
+          setProfile(prev => ({ ...(prev || {}), ...row }))
           setEditing(false)
-          setView('menu')
+          setView('planes')
         }}
       />
     )
 
-  if (view === 'planes' || view === 'diferentes' || view === 'cita' || view === 'solitario')
-    return <PlanDeck sign={user.chart.sun} mode={view} onBack={() => setView('menu')} />
+  let screen = null
 
-  if (view === 'guardados') return <Saved onBack={() => setView('menu')} />
-  if (view === 'garden') return <ZodiacGarden sign={user.chart.sun} onBack={() => setView('menu')} />
-  if (view === 'mapa') return <MapView onBack={() => setView('menu')} />
-
-  if (view === 'astro') {
-    return (
-      <div className="max-w-md mx-auto px-6 pt-8 pb-12">
-        <Back onClick={() => setView('menu')} />
-        <h2 className="text-2xl font-bold mb-2 text-center font-display">Astro</h2>
-        <p className="text-center text-zolar-rose/70 mb-8">Tarot, astrólogos y guías espirituales</p>
-
-        <div className="flex flex-col gap-4">
-          <div className="card-zolar rounded-2xl p-5 text-center">
-            <div className="text-4xl mb-2">🃏</div>
-            <h3 className="font-bold mb-1">Lectores de tarot</h3>
-            <p className="text-sm text-zolar-rose/70">Próximamente: sesiones con tarotistas verificados.</p>
-          </div>
-          <div className="card-zolar rounded-2xl p-5 text-center">
-            <div className="text-4xl mb-2">🔭</div>
-            <h3 className="font-bold mb-1">Astrólogos</h3>
-            <p className="text-sm text-zolar-rose/70">Próximamente: consultas de carta natal en profundidad.</p>
-          </div>
-          <div className="card-zolar rounded-2xl p-5 text-center">
-            <div className="text-4xl mb-2">✨</div>
-            <h3 className="font-bold mb-1">Lectura astral con IA</h3>
-            <p className="text-sm text-zolar-rose/70">Próximamente: tu carta interpretada al instante.</p>
-          </div>
-        </div>
-      </div>
+  if (view === 'planes' || view === 'diferentes' || view === 'cita') {
+    screen = (
+      <PlanDeck
+        sign={user.chart.sun}
+        mode={view}
+        showBack={view !== 'planes'}
+        onBack={() => setView('menu')}
+        onGoZoles={() => setView('zoles')}
+      />
     )
-  }
-
-  if (view === 'perfil') {
+  } else if (view === 'guardados') {
+    screen = <Saved onBack={() => setView('menu')} />
+  } else if (view === 'garden') {
+    screen = <ZodiacGarden sign={user.chart.sun} onBack={() => setView('menu')} />
+  } else if (view === 'zoles') {
+    screen = <Zoles user={user} onBack={() => setView('menu')} />
+  } else if (view === 'astro') {
+    screen = <Astro onBack={() => setView('menu')} />
+  } else if (view === 'feed') {
+    screen = (
+      <AstroFeed
+        user={user}
+        onBack={() => setView('menu')}
+        onGarden={() => setView('garden')}
+        onAstro={() => setView('astro')}
+      />
+    )
+  } else if (view === 'mapa') {
+    screen = (
+      <MapView
+        sign={user.chart.sun}
+        initialCat={mapCat}
+        onBack={() => {
+          setMapCat('todos')
+          setView('menu')
+        }}
+      />
+    )
+  } else if (view === 'perfil') {
     const sign = SIGNS[user.chart.sun]
-    return (
+    screen = (
       <div className="max-w-md mx-auto px-6 pt-8 pb-12">
         <Back onClick={() => setView('menu')} />
         <div className="text-center mb-6">
@@ -169,8 +244,7 @@ function AppScreens() {
 
         <button
           onClick={() => setEditing(true)}
-          className="w-full rounded-full py-3 font-bold text-white mb-3"
-          style={{ background: 'linear-gradient(90deg, #F4913F, #9D7295)' }}
+          className="w-full rounded-full py-3 font-bold text-white mb-3 cta-zolar"
         >
           Editar mis datos de nacimiento
         </button>
@@ -186,10 +260,8 @@ function AppScreens() {
         </button>
       </div>
     )
-  }
-
-  if (view === 'carta') {
-    return (
+  } else if (view === 'carta') {
+    screen = (
       <div className="max-w-md mx-auto px-6 pt-8 pb-12">
         <Back onClick={() => setView('menu')} />
         <div className="flex justify-center mb-6">
@@ -226,13 +298,16 @@ function AppScreens() {
               {profile.ai_reading}
             </div>
           ) : (
+            <div className="card-zolar rounded-2xl p-4 text-center text-sm text-zolar-rose/80">
+              {aiLoading ? '✨ Consultando las estrellas para tu lectura...' : 'Tu lectura se generará automáticamente.'}
+            </div>
+          )}
+          {aiError && (
             <button
               onClick={handleAiReading}
-              disabled={aiLoading}
-              className="w-full rounded-xl p-3 text-center font-semibold"
-              style={{ background: 'linear-gradient(135deg, #F4913F, #9D7295)' }}
+              className="w-full mt-3 rounded-xl p-3 text-center font-semibold cta-zolar"
             >
-              {aiLoading ? 'Consultando las estrellas...' : '✨ Leer mi carta con IA'}
+              Reintentar lectura
             </button>
           )}
           {aiError && <p className="text-sm text-red-400 mt-2 text-center">{aiError}</p>}
@@ -244,27 +319,18 @@ function AppScreens() {
         )}
       </div>
     )
+  } else {
+    screen = <Menu user={user} onSelect={setView} />
   }
 
-  async function handleAiReading() {
-    setAiLoading(true)
-    setAiError(null)
-    try {
-      const res = await fetch('/api/reading', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error generando la lectura')
-      setProfile(prev => ({ ...prev, ai_reading: data.reading }))
-    } catch (e) {
-      setAiError(e.message)
-    } finally {
-      setAiLoading(false)
-    }
-  }
+  const withNav = NAV_VIEWS.includes(view)
 
-  return <Menu user={user} onSelect={setView} />
+  return (
+    <>
+      {withNav && PADDED_VIEWS.includes(view) ? <div className="pb-24">{screen}</div> : screen}
+      {withNav && <BottomNav active={view} onSelect={setView} />}
+    </>
+  )
 }
 
 export default function App() {

@@ -17,11 +17,16 @@ area["wikidata"="Q2807"]->.mad;
   nwr["leisure"~"escape_game|bowling_alley|amusement_arcade|trampoline_park|miniature_golf|ice_rink"](area.mad);
   nwr["sport"~"laser_tag|karting|climbing|paintball|bowling"](area.mad);
   nwr["amenity"~"karaoke_box|planetarium|cinema"]["name"](area.mad);
+  nwr["karaoke"="yes"]["name"](area.mad);
   nwr["leisure"="sports_centre"]["sport"~"climbing|karting|laser_tag"](area.mad);
+  nwr["leisure"="dance"]["name"](area.mad);
   nwr["shop"="games"]["name"](area.mad);
   nwr["cafe"~"board_game|cat|book"]["name"](area.mad);
   nwr["cuisine"~"board_game"]["name"](area.mad);
   nwr["leisure"="adult_gaming_centre"]["name"](area.mad);
+  nwr["shop"="esoteric"]["name"](area.mad);
+  nwr["shop"="herbalist"]["name"](area.mad);
+  nwr["healthcare:speciality"~"acupuncture"]["name"](area.mad);
 );
 out center tags;
 `
@@ -40,17 +45,30 @@ const TAG_LABELS = [
   ['karaoke', 'Karaoke', '🎤'],
   ['planetarium', 'Planetario', '🪐'],
   ['cinema', 'Cine', '🎬'],
+  ['dance', 'Sala de baile', '💃'],
   ['games', 'Juegos de mesa', '🎲'],
   ['cafe', 'Café con encanto', '☕'],
   ['adult_gaming_centre', 'Gaming y VR', '🎮'],
+  ['esoteric', 'Tienda esotérica y tarot', '🔮'],
+  ['herbalist', 'Herbolario', '🌿'],
+  ['acupuncture', 'Acupuntura', '🪡'],
 ]
 
 function describe(tags) {
-  const raw = `${tags.leisure || ''} ${tags.sport || ''} ${tags.amenity || ''} ${tags.shop || ''}`
+  const raw = [
+    tags.leisure, tags.sport, tags.amenity, tags.shop,
+    tags['healthcare:speciality'], tags.karaoke === 'yes' ? 'karaoke' : '',
+  ].filter(Boolean).join(' ')
   for (const [key, label, emoji] of TAG_LABELS) {
-    if (raw.includes(key)) return { label, emoji }
+    if (raw.includes(key)) return { key, label, emoji }
   }
-  return { label: 'Ocio urbano', emoji: '🎯' }
+  return { key: 'ocio', label: 'Ocio urbano', emoji: '🎯' }
+}
+
+function categoryOf(key) {
+  if (key === 'esoteric' || key === 'herbalist') return 'esoterico'
+  if (key === 'acupuncture') return 'acupuntura'
+  return 'ocio-urbano'
 }
 
 function addressOf(tags) {
@@ -61,7 +79,7 @@ function addressOf(tags) {
 }
 
 async function main() {
-  console.log('Zolarium sync ocio urbano — OpenStreetMap (ODbL)')
+  console.log('Zolarium sync ocio urbano v2 — OpenStreetMap (ODbL)')
   const MIRRORS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
@@ -102,23 +120,29 @@ async function main() {
     if (seen.has(dedupe)) continue
     seen.add(dedupe)
 
-    const { label, emoji } = describe(tags)
-    const description = `${label} en Madrid. Plan urbano para quedar con gente o desconectar.`
-    const vector = computePlanArchetypeVector({ subcats: ['ocio-urbano'], title: name, description })
+    const { key, label, emoji } = describe(tags)
+    const category = categoryOf(key)
+    const description =
+      category === 'esoterico'
+        ? `${label} en Madrid. Un rincón para lo místico: tarot, astrología y guía espiritual.`
+        : category === 'acupuntura'
+          ? `${label} en Madrid. Bienestar y equilibrio para cuerpo y mente.`
+          : `${label} en Madrid. Plan urbano para quedar con gente o desconectar.`
+    const vector = computePlanArchetypeVector({ subcats: [category], title: name, description })
     const practical = derivePracticalFeatures({ title: name, description, isFree: false })
 
     rows.push({
       source_id: `osm-${el.type}-${el.id}`,
       title: name.slice(0, 140),
       description,
-      element: 'fuego',
-      subcats: ['lugar', 'ocio-urbano'],
+      element: category === 'ocio-urbano' ? 'fuego' : 'agua',
+      subcats: ['lugar', category],
       archetype_vector: vectorToArray(vector),
       price_tier: practical.price_tier,
       indoor: practical.indoor,
       time_slot: practical.time_slot,
-      social_energy: 'grupo',
-      intensity: 'activo',
+      social_energy: category === 'ocio-urbano' ? 'grupo' : 'solitario',
+      intensity: category === 'ocio-urbano' ? 'activo' : 'calmado',
       event_date: null,
       neighborhood: tags['addr:suburb'] || tags['addr:district'] || null,
       address: addressOf(tags),
@@ -139,7 +163,7 @@ async function main() {
     if (error) console.error('Upsert:', error.message)
     else ok += count ?? batch.length
   }
-  console.log(`Guardados: ${ok} sitios de ocio urbano`)
+  console.log(`Guardados: ${ok} sitios`)
 }
 
 main()

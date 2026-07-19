@@ -1,5 +1,3 @@
-
-
 export const ARCHETYPE_KEYS = [
   'innocent', 'explorer', 'sage', 'hero', 'outlaw', 'magician',
   'lover', 'jester', 'caregiver', 'creator', 'ruler', 'everyman',
@@ -57,6 +55,8 @@ export const CATEGORY_ARCHETYPES = {
   'mercadillos':       { everyman: 0.40, lover: 0.30, explorer: 0.30 },
   'templos':           { magician: 0.40, innocent: 0.30, sage: 0.30 },
   'ocio-urbano':       { hero: 0.35, jester: 0.35, explorer: 0.30 },
+  'esoterico':         { magician: 0.5, innocent: 0.2, sage: 0.3 },
+  'acupuntura':        { caregiver: 0.45, magician: 0.3, sage: 0.25 },
 }
 
 export const CATEGORY_FALLBACK = { everyman: 0.5, explorer: 0.5 }

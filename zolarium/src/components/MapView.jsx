@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -12,6 +12,7 @@ import { ARCHETYPE_KEYS, SIGN_ARCHETYPES } from '../engine/config.js'
 const CATS = [
   { key: 'todos', label: '✨ Todos' },
   { key: 'ocio-urbano', label: '🎯 Ocio' },
+  { key: 'karaoke', label: '🎤 Karaoke' },
   { key: 'musica', label: '🎵 Música' },
   { key: 'teatro-danza', label: '🎭 Teatro' },
   { key: 'cine', label: '🎬 Cine' },
@@ -21,12 +22,45 @@ const CATS = [
   { key: 'fiestas-populares', label: '🎉 Fiestas' },
   { key: 'infantil-familiar', label: '🧸 Familia' },
   { key: 'mercadillos', label: '🧺 Mercadillos' },
+  { key: 'esoterico', label: '🔮 Místico' },
+  { key: 'acupuntura', label: '🪡 Acupuntura' },
 ]
+
+const SKILL_EMOJI = { tarot: '🔮', astrologia: '🔭', acupuntura: '🪡', manos: '🖐️' }
+const SKILL_LABEL = { tarot: 'Tarot', astrologia: 'Astrología', acupuntura: 'Acupuntura', manos: 'Lectura de manos' }
+
+const CAR_KEY = 'zolar_car'
+const CAR_MAX_MS = 12 * 60 * 60 * 1000
+
+function loadCar() {
+  try {
+    const raw = localStorage.getItem(CAR_KEY)
+    if (!raw) return null
+    const pin = JSON.parse(raw)
+    if (!pin?.lat || !pin?.lon || !pin?.ts) throw new Error()
+    if (Date.now() - pin.ts > CAR_MAX_MS) throw new Error()
+    return pin
+  } catch {
+    localStorage.removeItem(CAR_KEY)
+    return null
+  }
+}
+
+function carAge(pin) {
+  const mins = Math.floor((Date.now() - pin.ts) / 60000)
+  if (mins < 1) return 'ahora mismo'
+  if (mins < 60) return `hace ${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `hace ${h}h ${m}min` : `hace ${h}h`
+}
 
 const SIGN_KEYS = Object.keys(SIGNS)
 const SIGN_VECTORS = SIGN_KEYS.map(sign =>
   ARCHETYPE_KEYS.map(k => SIGN_ARCHETYPES[sign][k] || 0)
 )
+const MULTI_SIGN_RATIO = 0.9
+const MAX_SIGNS = 4
 
 function cosine(a, b) {
   let d = 0, na = 0, nb = 0
@@ -39,6 +73,13 @@ function cosine(a, b) {
   return d / Math.sqrt(na * nb)
 }
 
+function hashStr(str) {
+  let h = 0
+  const s = String(str)
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+
 function assignSigns(plans) {
   const sims = plans.map(p => SIGN_VECTORS.map(sv => cosine(sv, p.archetype_vector)))
   const means = SIGN_KEYS.map((_, si) => {
@@ -47,17 +88,18 @@ function assignSigns(plans) {
     return sum / (sims.length || 1) || 1e-6
   })
   return plans.map((p, pi) => {
-    if (p.sign_override && SIGNS[p.sign_override]) return { ...p, sign: p.sign_override }
-    let best = 0
-    let bestScore = -Infinity
-    for (let si = 0; si < SIGN_KEYS.length; si++) {
-      const score = sims[pi][si] / means[si]
-      if (score > bestScore) {
-        bestScore = score
-        best = si
-      }
+    if (p.sign_override && SIGNS[p.sign_override]) {
+      return { ...p, sign: p.sign_override, signs: [p.sign_override] }
     }
-    return { ...p, sign: SIGN_KEYS[best] }
+    const scored = SIGN_KEYS.map((key, si) => ({ key, score: sims[pi][si] / means[si] }))
+      .sort((a, b) => b.score - a.score)
+    const best = scored[0].score
+    const signs = scored
+      .filter(x => x.score >= best * MULTI_SIGN_RATIO)
+      .slice(0, MAX_SIGNS)
+      .map(x => x.key)
+    const primary = signs[hashStr(p.id) % signs.length]
+    return { ...p, sign: primary, signs }
   })
 }
 
@@ -68,17 +110,47 @@ function truncate(text, max = 150) {
 }
 
 const iconCache = {}
-function signIcon(sign) {
-  if (iconCache[sign]) return iconCache[sign]
+function signIcon(sign, match) {
+  const cacheKey = `${sign}-${match ? 1 : 0}`
+  if (iconCache[cacheKey]) return iconCache[cacheKey]
   const s = SIGNS[sign]
   const textColor = isLightColor(s.color) ? '#2F2133' : '#fff'
-  iconCache[sign] = L.divIcon({
+  const size = match ? 36 : 22
+  const fontSize = match ? 18 : 11
+  const opacity = match ? 1 : 0.45
+  const glow = match ? `box-shadow:0 0 14px ${s.color}cc, 0 2px 10px rgba(0,0,0,0.45);` : 'box-shadow:0 2px 8px rgba(0,0,0,0.4);'
+  iconCache[cacheKey] = L.divIcon({
     className: '',
-    html: `<div style="width:34px;height:34px;border-radius:50%;background:${s.color};border:2px solid rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:17px;color:${textColor};box-shadow:0 2px 10px rgba(0,0,0,0.45)">${s.symbol}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${s.color};border:2px solid rgba(255,255,255,${match ? 0.9 : 0.4});display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;color:${textColor};opacity:${opacity};${glow}">${s.symbol}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   })
-  return iconCache[sign]
+  return iconCache[cacheKey]
+}
+
+const practIconCache = {}
+function practitionerIcon(skill) {
+  if (practIconCache[skill]) return practIconCache[skill]
+  const emoji = SKILL_EMOJI[skill] || '✨'
+  practIconCache[skill] = L.divIcon({
+    className: '',
+    html: `<div style="width:38px;height:38px;border-radius:50%;background:rgba(28,20,32,0.95);border:2.5px solid #FFC94A;display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 0 16px rgba(255,201,74,0.7), 0 2px 10px rgba(0,0,0,0.5)">${emoji}</div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  })
+  return practIconCache[skill]
+}
+
+let carIconCache = null
+function carIcon() {
+  if (carIconCache) return carIconCache
+  carIconCache = L.divIcon({
+    className: '',
+    html: `<div style="width:40px;height:40px;border-radius:50%;background:rgba(28,20,32,0.95);border:2.5px solid #00E0D1;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 18px rgba(0,224,209,0.7), 0 2px 10px rgba(0,0,0,0.5)">🚗</div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  })
+  return carIconCache
 }
 
 function clusterIcon(count) {
@@ -91,7 +163,7 @@ function clusterIcon(count) {
   })
 }
 
-function ClusterLayer({ index, plans, onSelect }) {
+function ClusterLayer({ index, plans, userSign, signFilter, onSelect }) {
   const map = useMap()
   const [, setTick] = useState(0)
   useMapEvents({
@@ -119,29 +191,41 @@ function ClusterLayer({ index, plans, onSelect }) {
       )
     }
     const p = plans[c.properties.idx]
+    const highlight = signFilter || userSign
+    const match = highlight ? (p.signs || [p.sign]).includes(highlight) : true
     return (
       <Marker
         key={p.id}
         position={[lat, lng]}
-        icon={signIcon(p.sign)}
+        icon={signIcon(match && highlight ? highlight : p.sign, match)}
+        zIndexOffset={match ? 500 : 0}
         eventHandlers={{ click: () => onSelect(p) }}
       />
     )
   })
 }
 
-export default function MapView({ onBack }) {
+export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
   const [plans, setPlans] = useState([])
+  const [practitioners, setPractitioners] = useState([])
   const [selected, setSelected] = useState(null)
-  const [cat, setCat] = useState('todos')
+  const [selectedPract, setSelectedPract] = useState(null)
+  const [cat, setCat] = useState(initialCat)
+  const [signFilter, setSignFilter] = useState(null)
+  const [catOpen, setCatOpen] = useState(initialCat !== 'todos')
+  const [carPin, setCarPin] = useState(null)
+  const [carSheet, setCarSheet] = useState(false)
+  const [carBusy, setCarBusy] = useState(false)
+  const mapRef = useRef(null)
 
   useEffect(() => {
     load()
+    setCarPin(loadCar())
   }, [])
 
   async function load() {
     const today = new Date().toISOString().slice(0, 10)
-    const [eventsRes, placesRes] = await Promise.all([
+    const [eventsRes, placesRes, practRes] = await Promise.all([
       supabase.from('plans').select('*')
         .not('archetype_vector', 'is', null)
         .not('lat', 'is', null)
@@ -152,16 +236,74 @@ export default function MapView({ onBack }) {
         .not('lat', 'is', null)
         .is('event_date', null)
         .limit(400),
+      supabase.from('practitioners').select('*')
+        .eq('active', true)
+        .not('lat', 'is', null),
     ])
     const all = [...(eventsRes.data || []), ...(placesRes.data || [])]
       .map(p => ({ ...p, cat: p.subcats?.[1] || null }))
     setPlans(assignSigns(all))
+    setPractitioners(practRes.data || [])
   }
 
-  const filtered = useMemo(
-    () => (cat === 'todos' ? plans : plans.filter(p => p.cat === cat)),
-    [plans, cat]
-  )
+  function savePin(lat, lon) {
+    const pin = { lat, lon, ts: Date.now() }
+    localStorage.setItem(CAR_KEY, JSON.stringify(pin))
+    setCarPin(pin)
+    setCarBusy(false)
+    mapRef.current?.setView([lat, lon], Math.max(mapRef.current.getZoom(), 16), { animate: true })
+  }
+
+  function parkHere() {
+    if (carBusy) return
+    setCarBusy(true)
+    if (!navigator.geolocation) {
+      const c = mapRef.current?.getCenter()
+      savePin(c?.lat ?? 40.4168, c?.lng ?? -3.7038)
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => savePin(pos.coords.latitude, pos.coords.longitude),
+      () => {
+        const c = mapRef.current?.getCenter()
+        savePin(c?.lat ?? 40.4168, c?.lng ?? -3.7038)
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
+  function removeCar() {
+    localStorage.removeItem(CAR_KEY)
+    setCarPin(null)
+    setCarSheet(false)
+  }
+
+  function openCar() {
+    const pin = loadCar()
+    if (!pin) {
+      setCarPin(null)
+      return
+    }
+    setCarPin(pin)
+    closeSheets()
+    setCarSheet(true)
+    mapRef.current?.setView([pin.lat, pin.lon], Math.max(mapRef.current.getZoom(), 16), { animate: true })
+  }
+
+  const filtered = useMemo(() => {
+    let list = plans
+    if (cat === 'karaoke') list = list.filter(p => p.emoji === '🎤')
+    else if (cat !== 'todos') list = list.filter(p => p.cat === cat)
+    if (signFilter) list = list.filter(p => (p.signs || [p.sign]).includes(signFilter))
+    return list
+  }, [plans, cat, signFilter])
+
+  const visiblePractitioners = useMemo(() => {
+    if (cat === 'todos') return practitioners
+    if (cat === 'acupuntura') return practitioners.filter(p => p.skill === 'acupuntura')
+    if (cat === 'esoterico') return practitioners.filter(p => p.skill !== 'acupuntura')
+    return []
+  }, [practitioners, cat])
 
   const index = useMemo(() => {
     const sc = new Supercluster({ radius: 60, maxZoom: 17 })
@@ -177,19 +319,64 @@ export default function MapView({ onBack }) {
 
   const s = selected ? SIGNS[selected.sign] : null
 
+  function closeSheets() {
+    setSelected(null)
+    setSelectedPract(null)
+    setCarSheet(false)
+  }
+
   return (
     <div className="fixed inset-0" style={{ height: '100dvh' }}>
       <MapContainer
+        ref={mapRef}
         center={[40.4168, -3.7038]}
         zoom={12}
-        style={{ width: '100%', height: '100%', background: '#2F2133' }}
+        style={{ width: '100%', height: '100%', background: '#17101d' }}
         zoomControl={false}
       >
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; OpenStreetMap &copy; CARTO'
         />
-        <ClusterLayer index={index} plans={filtered} onSelect={setSelected} />
+        <ClusterLayer
+          index={index}
+          plans={filtered}
+          userSign={sign}
+          signFilter={signFilter}
+          onSelect={p => {
+            setSelectedPract(null)
+            setCarSheet(false)
+            setSelected(p)
+          }}
+        />
+        {visiblePractitioners.map(p => (
+          <Marker
+            key={`pr-${p.id}`}
+            position={[p.lat, p.lon]}
+            icon={practitionerIcon(p.skill)}
+            zIndexOffset={800}
+            eventHandlers={{
+              click: () => {
+                setSelected(null)
+                setCarSheet(false)
+                setSelectedPract(p)
+              },
+            }}
+          />
+        ))}
+        {carPin && (
+          <Marker
+            position={[carPin.lat, carPin.lon]}
+            icon={carIcon()}
+            zIndexOffset={900}
+            eventHandlers={{
+              click: () => {
+                closeSheets()
+                setCarSheet(true)
+              },
+            }}
+          />
+        )}
       </MapContainer>
 
       <div className="absolute top-0 inset-x-0 pt-6" style={{ zIndex: 1000 }}>
@@ -201,26 +388,219 @@ export default function MapView({ onBack }) {
             {filtered.length} planes
           </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-1" style={{ scrollbarWidth: 'none' }}>
-          {CATS.map(c => (
-            <button
-              key={c.key}
-              onClick={() => {
-                setCat(c.key)
-                setSelected(null)
-              }}
-              className={`shrink-0 text-sm rounded-full px-4 py-2 text-white transition-all ${cat === c.key ? 'cta-zolar font-bold' : 'bubble-glass'}`}
-            >
-              {c.label}
-            </button>
-          ))}
+
+        <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-1 items-center" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => {
+              setSignFilter(null)
+              closeSheets()
+            }}
+            className={`shrink-0 text-sm rounded-full px-3 py-2 text-white ${!signFilter ? 'cta-zolar font-bold' : 'bubble-glass'}`}
+          >
+            ✨
+          </button>
+          {SIGN_KEYS.map(k => {
+            const sk = SIGNS[k]
+            const active = signFilter === k
+            return (
+              <button
+                key={k}
+                onClick={() => {
+                  setSignFilter(active ? null : k)
+                  closeSheets()
+                }}
+                title={sk.name}
+                className="shrink-0 w-9 h-9 rounded-full text-base font-bold flex items-center justify-center"
+                style={
+                  active
+                    ? { background: sk.color, color: isLightColor(sk.color) ? '#2F2133' : '#fff', boxShadow: `0 0 14px ${sk.color}bb` }
+                    : { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.22)', color: sk.soft }
+                }
+              >
+                {sk.symbol}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setCatOpen(o => !o)}
+            aria-label="Filtros por actividad"
+            className="shrink-0 w-9 h-9 rounded-full bubble-glass text-white/90 text-sm"
+          >
+            {catOpen ? '▴' : '▾'}
+          </button>
         </div>
+
+        {catOpen && (
+          <div className="flex gap-2 overflow-x-auto px-5 pt-2 pb-1" style={{ scrollbarWidth: 'none' }}>
+            {CATS.map(c => (
+              <button
+                key={c.key}
+                onClick={() => {
+                  setCat(c.key)
+                  closeSheets()
+                }}
+                className={`shrink-0 text-sm rounded-full px-4 py-2 text-white transition-all ${cat === c.key ? 'cta-zolar font-bold' : 'bubble-glass'}`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+
+      <button
+        onClick={() => (carPin ? openCar() : parkHere())}
+        aria-label={carPin ? 'Ver mi coche' : 'Marcar dónde aparqué'}
+        className="absolute bottom-24 right-5 w-14 h-14 rounded-full text-2xl flex items-center justify-center"
+        style={{
+          zIndex: 900,
+          background: 'rgba(28,20,32,0.92)',
+          border: carPin ? '2.5px solid #00E0D1' : '1.5px solid rgba(255,255,255,0.25)',
+          boxShadow: carPin ? '0 0 18px rgba(0,224,209,0.6), 0 6px 20px rgba(0,0,0,0.45)' : '0 6px 20px rgba(0,0,0,0.45)',
+          opacity: carBusy ? 0.6 : 1,
+        }}
+      >
+        {carBusy ? '📡' : '🚗'}
+      </button>
+
+      <AnimatePresence>
+        {carSheet && carPin && (
+          <motion.div
+            className="absolute inset-x-0 bottom-0 px-4 pb-24"
+            style={{ zIndex: 1000 }}
+            initial={{ y: '110%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '110%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <div
+              className="rounded-[28px] shadow-2xl backdrop-blur-xl relative overflow-hidden p-4"
+              style={{
+                background: 'rgba(28,20,32,0.94)',
+                border: '1px solid rgba(0,224,209,0.4)',
+                boxShadow: '0 -4px 40px rgba(0,224,209,0.3), 0 20px 40px rgba(0,0,0,0.5)',
+              }}
+            >
+              <button
+                onClick={() => setCarSheet(false)}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bubble-glass text-white/80 text-sm z-10"
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 shrink-0 rounded-full bubble-glass flex items-center justify-center text-2xl">
+                  🚗
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold leading-tight">Tu coche</h3>
+                  <p className="text-xs text-white/70 mt-0.5">
+                    Aparcado {carAge(carPin)} · el pin se borra a las 12h
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-end mt-3 gap-2">
+                <button
+                  onClick={removeCar}
+                  className="bubble-glass rounded-full px-4 py-2 text-xs text-white/80"
+                >
+                  Quitar pin
+                </button>
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${carPin.lat},${carPin.lon}&travelmode=walking`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="cta-zolar rounded-full px-4 py-2 text-xs font-semibold"
+                >
+                  🚶 Llévame a él
+                </a>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedPract && (
+          <motion.div
+            className="absolute inset-x-0 bottom-0 px-4 pb-24"
+            style={{ zIndex: 1000 }}
+            initial={{ y: '110%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '110%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <div
+              className="rounded-[28px] shadow-2xl backdrop-blur-xl relative overflow-hidden p-4"
+              style={{
+                background: 'rgba(28,20,32,0.94)',
+                border: '1px solid rgba(255,201,74,0.4)',
+                boxShadow: '0 -4px 40px rgba(255,201,74,0.3), 0 20px 40px rgba(0,0,0,0.5)',
+              }}
+            >
+              <button
+                onClick={() => setSelectedPract(null)}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bubble-glass text-white/80 text-sm z-10"
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 shrink-0 rounded-full bubble-glass overflow-hidden flex items-center justify-center text-xl">
+                  {selectedPract.photo_url ? (
+                    <img src={selectedPract.photo_url} alt="" className="w-full h-full object-cover"
+                      onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ) : (
+                    SKILL_EMOJI[selectedPract.skill] || '✨'
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold leading-tight">{selectedPract.name}</h3>
+                    {selectedPract.featured && (
+                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5" style={{ background: 'rgba(255,201,74,0.25)', color: '#FFC94A' }}>
+                        ⭐ Destacado
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-white/70 mt-0.5">
+                    {SKILL_EMOJI[selectedPract.skill]} {SKILL_LABEL[selectedPract.skill] || selectedPract.skill}
+                    <span className="ml-2" style={{ color: '#FFC94A' }}>★ {Number(selectedPract.rating || 5).toFixed(1)}</span>
+                  </p>
+                </div>
+              </div>
+              {selectedPract.description && (
+                <p className="text-xs text-white/80 mt-2 line-clamp-2">{selectedPract.description}</p>
+              )}
+              <div className="flex items-center justify-between mt-3 gap-2">
+                <span className="text-[11px] text-white/60 truncate">
+                  📍 {selectedPract.neighborhood || selectedPract.address || 'Madrid'}
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  {selectedPract.phone && (
+                    <a href={`tel:${selectedPract.phone}`} className="bubble-glass rounded-full px-3 py-1.5 text-xs text-white/90">
+                      📞
+                    </a>
+                  )}
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${selectedPract.lat},${selectedPract.lon}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cta-zolar rounded-full px-3 py-1.5 text-xs font-semibold"
+                  >
+                    Cómo llegar
+                  </a>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {selected && (
           <motion.div
-            className="absolute inset-x-0 bottom-0 px-4 pb-6"
+            className="absolute inset-x-0 bottom-0 px-4 pb-24"
             style={{ zIndex: 1000 }}
             initial={{ y: '110%' }}
             animate={{ y: 0 }}
@@ -264,9 +644,28 @@ export default function MapView({ onBack }) {
                     <Mascot sign={selected.sign} size={58} />
                   </div>
                   <div className="min-w-0 pt-1">
-                    <p className="text-xs mb-0.5 font-semibold" style={{ color: s.soft, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
-                      {s.symbol} Plan muy {s.name}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                      <p className="text-xs font-semibold" style={{ color: s.soft, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+                        {s.symbol} Plan muy {s.name}
+                      </p>
+                      {(selected.signs || []).filter(k => k !== selected.sign).map(k => {
+                        const sk = SIGNS[k]
+                        return (
+                          <span
+                            key={k}
+                            title={sk.name}
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold"
+                            style={{
+                              background: sk.color,
+                              color: isLightColor(sk.color) ? '#2F2133' : '#fff',
+                              boxShadow: `0 0 8px ${sk.color}88`,
+                            }}
+                          >
+                            {sk.symbol}
+                          </span>
+                        )
+                      })}
+                    </div>
                     <h3 className="font-bold font-display leading-tight pr-6 text-sm" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
                       {selected.title}
                     </h3>

@@ -16,7 +16,7 @@ export default function Saved({ onBack }) {
 
   return (
     <div className="max-w-md mx-auto px-4 pt-6 pb-12">
-      <button onClick={onBack} className="text-zolar-rose/70 mb-4">← Volver</button>
+      <button onClick={onBack} className="inline-flex items-center self-start mb-4 text-sm text-white/90 bubble-glass rounded-full px-4 py-2">← Volver</button>
       <h2 className="text-2xl font-bold mb-6 font-display">Mis planes guardados</h2>
 
       {plans === null && <p className="text-zolar-rose/60">Cargando...</p>}

@@ -3,10 +3,10 @@ import { computeBaseVector, arrayToVector, normalize } from '../engine/archetype
 import { effectiveVector } from '../engine/ageModulator.js'
 import { scorePlan } from '../engine/scoring.js'
 import { buildDeck } from '../engine/deck.js'
-import { ARCHETYPE_KEYS, DECK, W_POINT_CITA, W_POINT_SOLITARIO } from '../engine/config.js'
-
+import { ARCHETYPE_KEYS, SIGN_ARCHETYPES, DECK, W_POINT_CITA, W_POINT_SOLITARIO } from '../engine/config.js'
 
 const DEFAULT_LOCATION = { lat: 40.4168, lon: -3.7038 }
+const ASC_MIX = 0.35
 
 async function loadUserContext() {
   const { data: { session } } = await supabase.auth.getSession()
@@ -28,25 +28,87 @@ async function loadUserContext() {
 }
 
 function invertVector(vectorObj) {
-
   const max = Math.max(...ARCHETYPE_KEYS.map(k => vectorObj[k] || 0))
   const inverted = {}
   for (const k of ARCHETYPE_KEYS) inverted[k] = max - (vectorObj[k] || 0) + 0.01
   return normalize(inverted)
 }
 
-export async function fetchDeck(_sign, mode = 'planes') {
+function mixWithSign(vectorObj, signKey, alpha = ASC_MIX) {
+  const sv = signKey ? SIGN_ARCHETYPES[signKey] : null
+  if (!sv) return vectorObj
+  const out = {}
+  for (const k of ARCHETYPE_KEYS) {
+    out[k] = (1 - alpha) * (vectorObj[k] || 0) + alpha * (sv[k] || 0)
+  }
+  return normalize(out)
+}
+
+function memberEffectiveVector(member, romantic) {
+  if (!member?.chart) return null
+  const weights = romantic ? W_POINT_CITA : null
+  const base = (member.archetype_vector?.length && !weights)
+    ? arrayToVector(member.archetype_vector)
+    : computeBaseVector(member.chart, weights).vector
+  let eff = effectiveVector(base, member.chart, member.birth_date)
+  if (!romantic) eff = mixWithSign(eff, member.chart.ascendant)
+  return eff
+}
+
+function blendVectors(vectors) {
+  const acc = {}
+  for (const k of ARCHETYPE_KEYS) {
+    acc[k] = vectors.reduce((sum, v) => sum + (v?.[k] || 0), 0)
+  }
+  return normalize(acc)
+}
+
+function cosineWithArray(vectorObj, arr) {
+  let d = 0, na = 0, nb = 0
+  for (let i = 0; i < ARCHETYPE_KEYS.length; i++) {
+    const a = vectorObj[ARCHETYPE_KEYS[i]] || 0
+    const b = arr?.[i] || 0
+    d += a * b
+    na += a * a
+    nb += b * b
+  }
+  if (!na || !nb) return 0
+  return d / Math.sqrt(na * nb)
+}
+
+export async function fetchDeck(_sign, mode = 'planes', members = []) {
   const { profile, weights, interactions } = await loadUserContext()
   if (!profile?.chart) throw new Error('Perfil sin carta astral')
 
+  const romantic = mode === 'cita' && members.length === 1 && members[0]?.role === 'pareja'
+  const classicCita = mode === 'cita' && members.length === 0
+  const friendGroup = members.length >= 1 && !romantic
 
-  const modeWeights = mode === 'cita' ? W_POINT_CITA : mode === 'solitario' ? W_POINT_SOLITARIO : null
+  const modeWeights = (romantic || classicCita)
+    ? W_POINT_CITA
+    : mode === 'solitario' ? W_POINT_SOLITARIO : null
+
   const baseVector = (profile.archetype_vector?.length && !modeWeights)
     ? arrayToVector(profile.archetype_vector)
     : computeBaseVector(profile.chart, modeWeights).vector
 
   let effVector = effectiveVector(baseVector, profile.chart, profile.birth_date)
   if (mode === 'diferentes') effVector = invertVector(effVector)
+  if (friendGroup) effVector = mixWithSign(effVector, profile.chart.ascendant)
+
+  const participants = []
+  if (members.length) {
+    participants.push({ sign: profile.chart.sun, vec: effVector })
+    const vectors = [effVector]
+    for (const m of members) {
+      const mv = memberEffectiveVector(m, romantic)
+      if (mv) {
+        vectors.push(mv)
+        participants.push({ sign: m.chart?.sun, vec: mv })
+      }
+    }
+    effVector = blendVectors(vectors)
+  }
 
   const sign = profile.chart.sun
   const today = new Date().toISOString().slice(0, 10)
@@ -109,7 +171,19 @@ export async function fetchDeck(_sign, mode = 'planes') {
     const stat = planStatsById[plan.id]
     const total = (stat?.likes || 0) + (stat?.dislikes || 0)
     const pct = total > 0 ? Math.round((stat.likes / total) * 100) : 0
-    return { ...plan, votes_total: total, votes_pct: pct }
+    let matchSign = null
+    if (participants.length > 1) {
+      let best = -Infinity
+      for (const p of participants) {
+        if (!p.sign) continue
+        const c = cosineWithArray(p.vec, plan.archetype_vector)
+        if (c > best) {
+          best = c
+          matchSign = p.sign
+        }
+      }
+    }
+    return { ...plan, votes_total: total, votes_pct: pct, match_sign: matchSign }
   })
 }
 
