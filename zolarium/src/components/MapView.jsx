@@ -59,8 +59,21 @@ const SIGN_KEYS = Object.keys(SIGNS)
 const SIGN_VECTORS = SIGN_KEYS.map(sign =>
   ARCHETYPE_KEYS.map(k => SIGN_ARCHETYPES[sign][k] || 0)
 )
-const MULTI_SIGN_RATIO = 0.9
-const MAX_SIGNS = 4
+const MAX_SIGNS = 3
+const MIN_PER_SIGN = 20
+
+const SIGN_ELEMENT = {
+  aries: 'fuego', leo: 'fuego', sagitario: 'fuego',
+  tauro: 'tierra', virgo: 'tierra', capricornio: 'tierra',
+  geminis: 'aire', libra: 'aire', acuario: 'aire',
+  cancer: 'agua', escorpio: 'agua', piscis: 'agua',
+}
+const ELEMENT_SIGNS = {
+  fuego: ['aries', 'leo', 'sagitario'],
+  tierra: ['tauro', 'virgo', 'capricornio'],
+  aire: ['geminis', 'libra', 'acuario'],
+  agua: ['cancer', 'escorpio', 'piscis'],
+}
 
 function cosine(a, b) {
   let d = 0, na = 0, nb = 0
@@ -87,20 +100,44 @@ function assignSigns(plans) {
     for (const row of sims) sum += row[si]
     return sum / (sims.length || 1) || 1e-6
   })
-  return plans.map((p, pi) => {
+
+  const enriched = plans.map((p, pi) => {
     if (p.sign_override && SIGNS[p.sign_override]) {
-      return { ...p, sign: p.sign_override, signs: [p.sign_override] }
+      return { ...p, sign: p.sign_override, signs: [p.sign_override], _rank: null }
     }
     const scored = SIGN_KEYS.map((key, si) => ({ key, score: sims[pi][si] / means[si] }))
       .sort((a, b) => b.score - a.score)
-    const best = scored[0].score
-    const signs = scored
-      .filter(x => x.score >= best * MULTI_SIGN_RATIO)
-      .slice(0, MAX_SIGNS)
-      .map(x => x.key)
+    const signs = scored.slice(0, MAX_SIGNS).map(x => x.key)
     const primary = signs[hashStr(p.id) % signs.length]
-    return { ...p, sign: primary, signs }
+    return { ...p, sign: primary, signs, _rank: scored }
   })
+
+  const counts = {}
+  for (const k of SIGN_KEYS) counts[k] = 0
+  for (const p of enriched) for (const s of p.signs) counts[s] += 1
+
+  for (const sign of SIGN_KEYS) {
+    if (counts[sign] >= MIN_PER_SIGN) continue
+    const element = SIGN_ELEMENT[sign]
+    const siblings = ELEMENT_SIGNS[element].filter(s => s !== sign)
+
+    const candidates = enriched
+      .filter(p => p._rank && !p.signs.includes(sign))
+      .map(p => {
+        const own = p._rank.find(r => r.key === sign)?.score ?? 0
+        const kinship = p.signs.some(s => siblings.includes(s)) ? 1 : 0
+        return { p, own, kinship }
+      })
+      .sort((a, b) => (b.kinship - a.kinship) || (b.own - a.own))
+
+    for (const c of candidates) {
+      if (counts[sign] >= MIN_PER_SIGN) break
+      c.p.signs = [...c.p.signs, sign]
+      counts[sign] += 1
+    }
+  }
+
+  return enriched.map(({ _rank, ...p }) => p)
 }
 
 function truncate(text, max = 150) {
