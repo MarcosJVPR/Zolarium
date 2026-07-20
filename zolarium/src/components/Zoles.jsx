@@ -458,8 +458,8 @@ export default function Zoles({ user, onBack }) {
       <AnimatePresence>
         {toast && (
           <motion.div
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 bubble-glass rounded-full px-5 py-3 text-sm text-white z-50 max-w-[90vw] text-center"
-            style={{ background: 'rgba(28,20,32,0.9)' }}
+            className="fixed left-1/2 -translate-x-1/2 bubble-glass rounded-full px-5 py-3 text-sm text-white z-50 max-w-[90vw] text-center"
+            style={{ background: 'rgba(28,20,32,0.95)', bottom: 'calc(env(safe-area-inset-bottom) + 96px)', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
