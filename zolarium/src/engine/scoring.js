@@ -1,7 +1,7 @@
 import { ARCHETYPE_KEYS } from './config.js'
 import { vectorToArray } from './archetype.js'
 import {
-  SCORE_WEIGHTS, COLD_START_N, CONTEXT, BETA_PRIOR, PRACTICAL_FEATURE_SLOTS,
+  SCORE_WEIGHTS, COLD_START_N, CONTEXT, BETA_PRIOR, PRACTICAL_FEATURE_SLOTS, CATEGORY_SLOTS,
 } from './config.js'
 
 export function sigmoid(x) {
@@ -37,11 +37,19 @@ export function buildPracticalOneHot(features) {
   return out
 }
 
-export function buildPlanFeatureVector(planVectorArr, practicalFeatures) {
-  return [...planVectorArr, ...buildPracticalOneHot(practicalFeatures)]
+export function buildCategoryOneHot(features) {
+  const cat = Array.isArray(features?.subcats) ? features.subcats[1] : features?.category ?? null
+  return CATEGORY_SLOTS.map(c => (c === cat ? 1 : 0))
 }
 
-export const THETA_LENGTH = ARCHETYPE_KEYS.length + Object.values(PRACTICAL_FEATURE_SLOTS).reduce((a, s) => a + s.length, 0)
+export function buildPlanFeatureVector(planVectorArr, practicalFeatures) {
+  return [...planVectorArr, ...buildPracticalOneHot(practicalFeatures), ...buildCategoryOneHot(practicalFeatures)]
+}
+
+export const THETA_LENGTH =
+  ARCHETYPE_KEYS.length +
+  Object.values(PRACTICAL_FEATURE_SLOTS).reduce((a, s) => a + s.length, 0) +
+  CATEGORY_SLOTS.length
 
 export function sLearned(theta, x_p) {
   if (!theta || !theta.length) return 0.5 // sin aprendizaje todavía, neutro

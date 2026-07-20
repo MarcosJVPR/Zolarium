@@ -7,7 +7,7 @@ import { computeChart } from '../utils/chart'
 
 const FEED_LIMIT = 3
 const FEED_REWARD = 2
-const PET_REWARD_LIMIT = 3
+const PET_REWARD_LIMIT = 1
 const ZOOM_MIN = 0.55
 const ZOOM_MAX = 1.35
 const ZOOM_STEP = 0.2
@@ -316,15 +316,6 @@ export default function ZodiacGarden({ sign, onBack }) {
     setCatalog(catalogRes.data || [])
   }
 
-  async function persist(nextCare, nextDust, nextItems) {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
-    const update = { mascota: { ...nextCare, day: todayKey() } }
-    if (nextDust != null) update.stardust = nextDust
-    if (nextItems != null) update.garden_items = nextItems
-    await supabase.from('profiles').update(update).eq('id', session.user.id)
-  }
-
   async function persistField(field, value) {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
@@ -413,19 +404,15 @@ export default function ZodiacGarden({ sign, onBack }) {
     burst(night ? '💤' : '💚')
     if (!night) {
       setTemp('feliz', 1600)
-      const earn = care.pets < PET_REWARD_LIMIT
-      const next = {
-        happiness: Math.min(100, care.happiness + 2),
-        feeds: care.feeds,
-        pets: Math.min(PET_REWARD_LIMIT, care.pets + 1),
-      }
-      const dust = earn ? stardust + 1 : stardust
-      if (earn) {
-        setStardust(dust)
-        reward('+1 ⭐')
-      }
-      setCare(next)
-      persist(next, earn ? dust : null)
+      setCare(c => ({
+        happiness: Math.min(100, c.happiness + 2),
+        feeds: c.feeds,
+        pets: c.pets + 1,
+      }))
+      supabase.rpc('garden_care', { p_action: 'pet' }).then(({ data }) => {
+        if (data?.stardust != null) setStardust(data.stardust)
+        if (data?.reward > 0) reward(`+${data.reward} ⭐`)
+      })
     }
   }
 
@@ -434,16 +421,15 @@ export default function ZodiacGarden({ sign, onBack }) {
     burst('⭐')
     setTemp('come', 2200, () => setTemp('feliz', 1400))
     const msgIdx = care.feeds
-    const next = {
-      happiness: Math.min(100, care.happiness + 10),
-      feeds: care.feeds + 1,
-      pets: care.pets,
-    }
-    const dust = stardust + FEED_REWARD
-    setStardust(dust)
-    reward(`+${FEED_REWARD} ⭐`)
-    setCare(next)
-    persist(next, dust)
+    setCare(c => ({
+      happiness: Math.min(100, c.happiness + 10),
+      feeds: c.feeds + 1,
+      pets: c.pets,
+    }))
+    supabase.rpc('garden_care', { p_action: 'feed' }).then(({ data }) => {
+      if (data?.stardust != null) setStardust(data.stardust)
+      if (data?.reward > 0) reward(`+${data.reward} ⭐`)
+    })
     revealMessage(msgIdx)
   }
 
@@ -581,13 +567,15 @@ export default function ZodiacGarden({ sign, onBack }) {
     return item.id.replace(/^skin-/, '')
   }
 
-  function buy(item) {
+  async function buy(item) {
     if (!care || owned.includes(item.id) || stardust < item.price) return
-    const nextItems = [...owned, item.id]
-    const nextDust = stardust - item.price
-    setOwned(nextItems)
-    setStardust(nextDust)
-    persist(care, nextDust, nextItems)
+    const { data, error } = await supabase.rpc('garden_buy', { p_item: item.id })
+    if (error || !data) {
+      showToast('El cosmos rechazó la compra ✋')
+      return
+    }
+    setOwned(Array.isArray(data.items) ? data.items : [...owned, item.id])
+    setStardust(data.stardust ?? Math.max(0, stardust - item.price))
     burst('✨')
     if (item.kind === 'skin' || item.kind === 'fondo') equip(item)
   }
@@ -909,7 +897,7 @@ export default function ZodiacGarden({ sign, onBack }) {
                 </div>
               </div>
               <p className="text-xs text-zolar-rose/70 mb-4">
-                Gana polvo estelar cuidando a {s.name}: alimentar +{FEED_REWARD}⭐, mimos +1⭐. Con 🪴 colocas tus compras donde quieras.
+                Gana polvo estelar cuidando a {s.name}: la primera comida del día +{FEED_REWARD}⭐ y un mimo +1⭐. Con 🪴 colocas tus compras donde quieras.
               </p>
               <div className="flex flex-col gap-3">
                 {catalog.map(item => {

@@ -10,6 +10,7 @@ import MapView from './components/MapView'
 import Zoles from './components/Zoles'
 import Astro from './components/Astro'
 import AstroFeed from './components/AstroFeed'
+import Legal from './components/Legal'
 import BottomNav from './components/BottomNav'
 import ZolariumZ from './components/ZolariumZ'
 import StarField from './components/StarField'
@@ -225,6 +226,8 @@ function AppScreens() {
         }}
       />
     )
+  } else if (view === 'legal') {
+    screen = <Legal onBack={() => setView('perfil')} />
   } else if (view === 'perfil') {
     const sign = SIGNS[user.chart.sun]
     screen = (
@@ -251,6 +254,13 @@ function AppScreens() {
         <p className="text-xs text-center text-zolar-rose/50 mb-8">
           Tus planes guardados no se pierden al editar.
         </p>
+
+        <button
+          onClick={() => setView('legal')}
+          className="w-full text-sm text-zolar-rose/50 underline mb-3"
+        >
+          Privacidad, términos y aviso legal
+        </button>
 
         <button
           onClick={signOut}

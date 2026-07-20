@@ -112,6 +112,12 @@ export const PRACTICAL_FEATURE_SLOTS = {
   intensity: ['calmado', 'medio', 'activo'],
 }
 
+export const CATEGORY_SLOTS = [
+  'exposiciones', 'musica', 'teatro-danza', 'deporte', 'talleres', 'conferencias',
+  'fiestas-populares', 'cine', 'infantil-familiar', 'naturaleza-paseos',
+  'monumentos', 'mercadillos', 'templos', 'ocio-urbano', 'esoterico', 'acupuntura',
+]
+
 
 export const PRACTICAL_KEYWORD_RULES = {
   price_tier: [

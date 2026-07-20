@@ -627,6 +627,11 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
                     className="absolute inset-0"
                     style={{ background: 'linear-gradient(to top, rgba(28,20,32,0.95) 0%, rgba(28,20,32,0.25) 55%, transparent 100%)' }}
                   />
+                  {/4sq|fsq|foursquare/i.test(selected.image_url) && (
+                    <span className="absolute top-2 left-2 text-[9px] text-white/75 bg-black/45 rounded-full px-2 py-0.5">
+                      📷 Foursquare
+                    </span>
+                  )}
                 </div>
               )}
 

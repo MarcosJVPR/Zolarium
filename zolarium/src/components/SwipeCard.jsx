@@ -121,6 +121,11 @@ export default function SwipeCard({ plan, sign, onSwipe, canInvite = false, onIn
                 <div className="absolute bottom-3 left-3 bubble-glass rounded-full w-10 h-10 flex items-center justify-center text-xl">
                   {plan.emoji}
                 </div>
+                {/4sq|fsq|foursquare/i.test(plan.image_url) && (
+                  <span className="absolute top-2 right-2 text-[9px] text-white/75 bg-black/45 rounded-full px-2 py-0.5">
+                    📷 Foursquare
+                  </span>
+                )}
               </>
             ) : (
               <div
