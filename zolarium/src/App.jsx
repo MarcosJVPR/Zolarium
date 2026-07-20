@@ -60,6 +60,18 @@ function AppScreens() {
   const [editing, setEditing] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState(null)
+  const [newPass, setNewPass] = useState('')
+  const [newPass2, setNewPass2] = useState('')
+  const [passError, setPassError] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') setView('nueva-clave')
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     const m = window.location.pathname.match(/^\/invite\/([A-Za-z0-9]{4,10})/)
@@ -186,6 +198,40 @@ function AppScreens() {
       />
     )
 
+  async function handleNewPassword() {
+    setPassError(null)
+    if (newPass.length < 8) {
+      setPassError('Mínimo 8 caracteres.')
+      return
+    }
+    if (newPass !== newPass2) {
+      setPassError('Las contraseñas no coinciden.')
+      return
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPass })
+    if (error) {
+      setPassError('No se pudo cambiar. Inténtalo de nuevo.')
+      return
+    }
+    setNewPass('')
+    setNewPass2('')
+    setView('planes')
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    const { error } = await supabase.rpc('delete_account')
+    if (error) {
+      setDeleting(false)
+      setConfirmDelete(false)
+      return
+    }
+    try {
+      await signOut()
+    } catch { }
+    window.location.href = '/'
+  }
+
   let screen = null
 
   if (view === 'planes' || view === 'diferentes' || view === 'cita') {
@@ -225,6 +271,33 @@ function AppScreens() {
           setView('menu')
         }}
       />
+    )
+  } else if (view === 'nueva-clave') {
+    screen = (
+      <div className="max-w-md mx-auto px-6 pt-16 pb-12">
+        <h2 className="text-2xl font-bold text-center font-display mb-2">Forja tu nueva llave</h2>
+        <p className="text-center text-zolar-rose/70 text-sm mb-8">
+          Escribe tu nueva contraseña para volver a las estrellas.
+        </p>
+        <input
+          type="password"
+          placeholder="Nueva contraseña"
+          value={newPass}
+          onChange={e => setNewPass(e.target.value)}
+          className="w-full bubble-glass rounded-full px-5 py-3 text-sm bg-transparent outline-none placeholder:text-white/40 mb-3"
+        />
+        <input
+          type="password"
+          placeholder="Repítela"
+          value={newPass2}
+          onChange={e => setNewPass2(e.target.value)}
+          className="w-full bubble-glass rounded-full px-5 py-3 text-sm bg-transparent outline-none placeholder:text-white/40 mb-3"
+        />
+        {passError && <p className="text-sm text-red-400 text-center mb-3">{passError}</p>}
+        <button onClick={handleNewPassword} className="w-full cta-zolar rounded-full py-3 font-bold">
+          Guardar y entrar
+        </button>
+      </div>
     )
   } else if (view === 'legal') {
     screen = <Legal onBack={() => setView('perfil')} />
@@ -268,6 +341,44 @@ function AppScreens() {
         >
           Cerrar sesión
         </button>
+
+        <div
+          className="mt-10 card-zolar rounded-2xl p-4"
+          style={{ border: '1px solid rgba(255,90,90,0.35)' }}
+        >
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full text-sm"
+              style={{ color: '#ff9090' }}
+            >
+              Borrar mi cuenta
+            </button>
+          ) : (
+            <div className="text-center">
+              <p className="text-sm font-bold text-white/90 mb-1">¿Borrar tu cuenta para siempre?</p>
+              <p className="text-xs text-zolar-rose/70 mb-3">
+                Se eliminarán tu carta, tus planes guardados, tu jardín, tu polvo estelar y tus Zoles. No se puede deshacer.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 bubble-glass rounded-full py-2 text-sm text-white/85"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="flex-1 rounded-full py-2 text-sm font-bold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #b3273b, #7a1f4b)' }}
+                >
+                  {deleting ? 'Borrando...' : 'Sí, borrar todo'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     )
   } else if (view === 'carta') {
