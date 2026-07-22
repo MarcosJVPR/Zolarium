@@ -250,6 +250,7 @@ async function main() {
         lat: c.lat,
         lon: c.lon,
         emoji: c.emoji,
+        wheelchair: c.tags.wheelchair === 'yes' ? true : c.tags.wheelchair === 'no' ? false : null,
         source: 'openstreetmap.org',
         source_updated_at: new Date().toISOString(),
       })

@@ -1,5 +1,7 @@
-import { motion, useMotionValue, useTransform } from 'framer-motion'
+import { useState } from 'react'
+import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion'
 import { SIGNS } from '../utils/zodiac'
+import { supabase } from '../utils/supabase'
 
 const MIN_VOTES = 100
 
@@ -31,6 +33,24 @@ export default function SwipeCard({ plan, sign, onSwipe, canInvite = false, onIn
   const likeOpacity = useTransform(x, [40, 120], [0, 1])
   const nopeOpacity = useTransform(x, [-120, -40], [1, 0])
   const inviteHint = useTransform(y, [-140, -50], [1, 0])
+  const [expanded, setExpanded] = useState(false)
+  const [flagState, setFlagState] = useState('idle')
+
+  async function flagPlan() {
+    if (flagState !== 'idle') return
+    setFlagState('busy')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setFlagState('idle')
+      return
+    }
+    const { error } = await supabase.from('plan_flags').insert({
+      plan_id: plan.id,
+      user_id: session.user.id,
+      reason: 'no_existe',
+    })
+    setFlagState(error && !error.message?.includes('duplicate') ? 'idle' : 'done')
+  }
 
   const s = SIGNS[sign]
   const matchSign = plan.match_sign ? SIGNS[plan.match_sign] : null
@@ -41,7 +61,10 @@ export default function SwipeCard({ plan, sign, onSwipe, canInvite = false, onIn
     <motion.div
       className="absolute inset-0"
       style={{ x, y, rotate, scale }}
-      drag
+      drag={!expanded}
+      onTap={() => {
+        if (!expanded) setExpanded(true)
+      }}
       dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
       dragElastic={{ left: 0.5, right: 0.5, top: canInvite ? 0.55 : 0.12, bottom: 0.12 }}
       dragSnapToOrigin
@@ -80,6 +103,60 @@ export default function SwipeCard({ plan, sign, onSwipe, canInvite = false, onIn
           boxShadow: `0 12px 44px ${s.color}40, 0 24px 60px rgba(0,0,0,0.45)`,
         }}
       >
+        <AnimatePresence>
+          {expanded && (
+            <motion.div
+              className="absolute inset-0 z-20 rounded-[28px] p-5 flex flex-col"
+              style={{ background: 'rgba(20,14,27,0.97)', backdropFilter: 'blur(14px)' }}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              onPointerDownCapture={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setExpanded(false)}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full bubble-glass text-white/80 text-sm"
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+              <div className="text-3xl mb-2">{plan.emoji}</div>
+              <h2 className="text-lg font-bold font-display leading-tight pr-8">{plan.title}</h2>
+              <div className="flex-1 min-h-0 overflow-y-auto mt-3 pr-1">
+                <p className="text-sm text-zolar-rose/90 leading-relaxed whitespace-pre-line">
+                  {plan.description || 'El cosmos no dejó más detalles de este plan.'}
+                </p>
+                <div className="mt-4 flex flex-col gap-1.5 text-sm text-zolar-rose/75">
+                  {plan.event_date && <p>📅 {plan.event_date.slice(8, 10)}/{plan.event_date.slice(5, 7)}/{plan.event_date.slice(0, 4)}</p>}
+                  <p>📍 {plan.address || plan.neighborhood || 'Madrid'}</p>
+                  {plan.price_tier === 0 && <p>🎟️ Gratuito</p>}
+                </div>
+              </div>
+              <div className="shrink-0 pt-3 flex flex-col gap-2">
+                <a
+                  href={mapsUrl(plan)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full cta-zolar rounded-full py-2.5 text-sm font-semibold text-center"
+                >
+                  Cómo llegar
+                </a>
+                <button
+                  onClick={flagPlan}
+                  disabled={flagState !== 'idle'}
+                  className="w-full text-xs text-zolar-rose/50 underline decoration-dotted py-1"
+                >
+                  {flagState === 'done'
+                    ? '💜 Gracias, lo revisaremos'
+                    : flagState === 'busy'
+                      ? 'Enviando...'
+                      : '🚩 Este sitio ya no existe o está mal'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.div
           style={{ opacity: likeOpacity, color: '#00E0D1', borderColor: '#00E0D1', textShadow: '0 0 12px rgba(0,224,209,0.6)' }}
           className="absolute top-6 left-6 z-10 border-2 font-bold px-3 py-1 rounded-xl rotate-[-15deg] bg-black/30 backdrop-blur"

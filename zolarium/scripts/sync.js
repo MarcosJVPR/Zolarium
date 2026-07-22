@@ -200,8 +200,15 @@ async function syncDataset({ slug, type, fallbackCategory, fallbackElement }, im
   }
 
   let ok = 0
-  for (let i = 0; i < rows.length; i += 200) {
-    const batch = rows.slice(i, i + 200)
+  const byTitle = new Map()
+  for (const r of rows) {
+    const k = r.title.toLowerCase()
+    const prev = byTitle.get(k)
+    if (!prev || (r.event_date || '9999') < (prev.event_date || '9999')) byTitle.set(k, r)
+  }
+  const deduped = [...byTitle.values()]
+  for (let i = 0; i < deduped.length; i += 200) {
+    const batch = deduped.slice(i, i + 200)
     const { error, count } = await db
       .from('plans')
       .upsert(batch, { onConflict: 'source_id', count: 'exact' })

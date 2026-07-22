@@ -146,14 +146,39 @@ function truncate(text, max = 150) {
   return text.slice(0, max).replace(/\s+\S*$/, '') + '…'
 }
 
+const LANDMARKS = [
+  { name: 'El Retiro', lat: 40.4153, lon: -3.6845, emoji: '🌳' },
+  { name: 'Puerta del Sol', lat: 40.4169, lon: -3.7035, emoji: '🧭' },
+  { name: 'Plaza Mayor', lat: 40.4155, lon: -3.7074, emoji: '🏛️' },
+  { name: 'Gran Vía', lat: 40.4203, lon: -3.7059, emoji: '🎭' },
+  { name: 'Templo de Debod', lat: 40.4240, lon: -3.7177, emoji: '🐫' },
+  { name: 'Atocha', lat: 40.4066, lon: -3.6894, emoji: '🚉' },
+  { name: 'Chamartín', lat: 40.4720, lon: -3.6825, emoji: '🚉' },
+  { name: 'Bernabéu', lat: 40.4531, lon: -3.6883, emoji: '⚽' },
+  { name: 'Matadero', lat: 40.3920, lon: -3.6975, emoji: '🎨' },
+  { name: 'Casa de Campo', lat: 40.4192, lon: -3.7469, emoji: '🌲' },
+]
+
+const landmarkCache = {}
+function landmarkIcon(emoji, name) {
+  if (landmarkCache[name]) return landmarkCache[name]
+  landmarkCache[name] = L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none;"><span style="font-size:16px;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.8))">${emoji}</span><span style="font-size:9px;color:rgba(255,255,255,0.55);text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;font-weight:600">${name}</span></div>`,
+    iconSize: [70, 30],
+    iconAnchor: [35, 15],
+  })
+  return landmarkCache[name]
+}
+
 const iconCache = {}
-function signIcon(sign, match) {
-  const cacheKey = `${sign}-${match ? 1 : 0}`
+function signIcon(sign, match, small) {
+  const cacheKey = `${sign}-${match ? 1 : 0}-${small ? 1 : 0}`
   if (iconCache[cacheKey]) return iconCache[cacheKey]
   const s = SIGNS[sign]
   const textColor = isLightColor(s.color) ? '#2F2133' : '#fff'
-  const size = match ? 36 : 22
-  const fontSize = match ? 18 : 11
+  const size = small ? (match ? 22 : 13) : match ? 36 : 22
+  const fontSize = small ? (match ? 12 : 8) : match ? 18 : 11
   const opacity = match ? 1 : 0.45
   const glow = match ? `box-shadow:0 0 14px ${s.color}cc, 0 2px 10px rgba(0,0,0,0.45);` : 'box-shadow:0 2px 8px rgba(0,0,0,0.4);'
   iconCache[cacheKey] = L.divIcon({
@@ -230,11 +255,12 @@ function ClusterLayer({ index, plans, userSign, signFilter, onSelect }) {
     const p = plans[c.properties.idx]
     const highlight = signFilter || userSign
     const match = highlight ? (p.signs || [p.sign]).includes(highlight) : true
+    const small = map.getZoom() < 14
     return (
       <Marker
         key={p.id}
         position={[lat, lng]}
-        icon={signIcon(match && highlight ? highlight : p.sign, match)}
+        icon={signIcon(match && highlight ? highlight : p.sign, match, small)}
         zIndexOffset={match ? 500 : 0}
         eventHandlers={{ click: () => onSelect(p) }}
       />
@@ -253,6 +279,7 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
   const [carPin, setCarPin] = useState(null)
   const [carSheet, setCarSheet] = useState(false)
   const [carBusy, setCarBusy] = useState(false)
+  const [accessible, setAccessible] = useState(false)
   const mapRef = useRef(null)
 
   useEffect(() => {
@@ -332,8 +359,9 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
     if (cat === 'karaoke') list = list.filter(p => p.emoji === '🎤')
     else if (cat !== 'todos') list = list.filter(p => p.cat === cat)
     if (signFilter) list = list.filter(p => (p.signs || [p.sign]).includes(signFilter))
+    if (accessible) list = list.filter(p => p.wheelchair === true)
     return list
-  }, [plans, cat, signFilter])
+  }, [plans, cat, signFilter, accessible])
 
   const visiblePractitioners = useMemo(() => {
     if (cat === 'todos') return practitioners
@@ -375,6 +403,15 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; OpenStreetMap &copy; CARTO'
         />
+        {LANDMARKS.map(lm => (
+          <Marker
+            key={lm.name}
+            position={[lm.lat, lm.lon]}
+            icon={landmarkIcon(lm.emoji, lm.name)}
+            zIndexOffset={-500}
+            interactive={false}
+          />
+        ))}
         <ClusterLayer
           index={index}
           plans={filtered}
@@ -458,6 +495,22 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
               </button>
             )
           })}
+          <button
+            onClick={() => {
+              setAccessible(a => !a)
+              closeSheets()
+            }}
+            aria-label="Solo sitios accesibles en silla de ruedas"
+            title="Accesible en silla de ruedas"
+            className="shrink-0 w-9 h-9 rounded-full text-base flex items-center justify-center"
+            style={
+              accessible
+                ? { background: '#00E0D1', color: '#17301d', boxShadow: '0 0 14px rgba(0,224,209,0.7)', fontWeight: 700 }
+                : { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.22)', color: 'rgba(255,255,255,0.8)' }
+            }
+          >
+            ♿
+          </button>
           <button
             onClick={() => setCatOpen(o => !o)}
             aria-label="Filtros por actividad"

@@ -138,6 +138,40 @@ function currentTransits() {
   }
 }
 
+function FallingLeaves() {
+  const leaves = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, i) => ({
+        id: i,
+        left: 4 + Math.random() * 92,
+        delay: Math.random() * 10,
+        dur: 8 + Math.random() * 7,
+        size: 13 + Math.random() * 9,
+        emoji: ['🍃', '🍂', '🌸', '🍃'][i % 4],
+      })),
+    []
+  )
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 30 }}>
+      {leaves.map(l => (
+        <span
+          key={l.id}
+          style={{
+            position: 'absolute',
+            top: '-6%',
+            left: `${l.left}%`,
+            fontSize: l.size,
+            opacity: 0,
+            animation: `zolarLeafFall ${l.dur}s linear ${l.delay}s infinite`,
+          }}
+        >
+          {l.emoji}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function ZodiacGarden({ sign, onBack }) {
   const s = SIGNS[sign]
   const night = isNightNow()
@@ -687,6 +721,7 @@ export default function ZodiacGarden({ sign, onBack }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden" style={{ height: '100dvh', background: '#17101d' }}>
+      {!night && <FallingLeaves />}
       <div
         ref={camRef}
         className="absolute"
