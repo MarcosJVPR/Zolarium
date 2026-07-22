@@ -138,35 +138,44 @@ function currentTransits() {
   }
 }
 
-function FallingLeaves() {
-  const leaves = useMemo(
-    () =>
-      Array.from({ length: 10 }, (_, i) => ({
-        id: i,
-        left: 4 + Math.random() * 92,
-        delay: Math.random() * 10,
-        dur: 8 + Math.random() * 7,
-        size: 13 + Math.random() * 9,
-        emoji: ['🍃', '🍂', '🌸', '🍃'][i % 4],
-      })),
-    []
-  )
+const LEAF_SETS = {
+  verde: ['hoja-verde-1', 'hoja-verde-2', 'hoja-verde-3'],
+  cerezo: ['hoja-cerezo-1', 'hoja-cerezo-2', 'hoja-cerezo-3'],
+  otono: ['hoja-otono-1', 'hoja-otono-2', 'hoja-otono-3'],
+  magica: ['hoja-magica-1', 'hoja-magica-2', 'hoja-magica-3'],
+}
+
+function FallingLeaves({ variant = 'verde' }) {
+  const leaves = useMemo(() => {
+    const set = LEAF_SETS[variant] || LEAF_SETS.verde
+    return Array.from({ length: 9 }, (_, i) => ({
+      id: i,
+      img: set[i % set.length],
+      left: 4 + Math.random() * 90,
+      delay: Math.random() * 12,
+      dur: 10 + Math.random() * 8,
+      size: 20 + Math.random() * 14,
+      anim: i % 2 ? 'zolarLeafFall' : 'zolarLeafFallB',
+    }))
+  }, [variant])
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 30 }}>
       {leaves.map(l => (
-        <span
+        <img
           key={l.id}
+          src={`/jardin/efectos/${l.img}.png`}
+          alt=""
+          draggable={false}
           style={{
             position: 'absolute',
-            top: '-6%',
+            top: '-8%',
             left: `${l.left}%`,
-            fontSize: l.size,
+            width: l.size,
             opacity: 0,
-            animation: `zolarLeafFall ${l.dur}s linear ${l.delay}s infinite`,
+            animation: `${l.anim} ${l.dur}s linear ${l.delay}s infinite`,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
           }}
-        >
-          {l.emoji}
-        </span>
+        />
       ))}
     </div>
   )
@@ -181,6 +190,7 @@ export default function ZodiacGarden({ sign, onBack }) {
   const [owned, setOwned] = useState([])
   const [equippedSkin, setEquippedSkin] = useState(null)
   const [equippedBg, setEquippedBg] = useState(null)
+  const [equippedEffect, setEquippedEffect] = useState(null)
   const [catalog, setCatalog] = useState([])
   const [layout, setLayout] = useState({ mascot: 'central', items: {}, platforms: {} })
   const [decorMode, setDecorMode] = useState(false)
@@ -322,7 +332,7 @@ export default function ZodiacGarden({ sign, onBack }) {
     const [profileRes, catalogRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('mascota, daily_messages, stardust, garden_items, mascot_skin, garden_bg, garden_layout')
+        .select('mascota, daily_messages, stardust, garden_items, mascot_skin, garden_bg, garden_layout, garden_effect')
         .eq('id', session.user.id)
         .maybeSingle(),
       supabase.from('garden_catalog').select('*').eq('active', true).order('sort'),
@@ -339,6 +349,7 @@ export default function ZodiacGarden({ sign, onBack }) {
     setOwned(Array.isArray(data?.garden_items) ? data.garden_items : [])
     setEquippedSkin(data?.mascot_skin || null)
     setEquippedBg(data?.garden_bg || null)
+    setEquippedEffect(data?.garden_effect || null)
     if (data?.garden_layout && typeof data.garden_layout === 'object') {
       setLayout({
         mascot: data.garden_layout.mascot || 'central',
@@ -625,6 +636,10 @@ export default function ZodiacGarden({ sign, onBack }) {
       setEquippedBg(next)
       setBgFallback(false)
       persistField('garden_bg', next)
+    } else if (item.kind === 'effect') {
+      const next = equippedEffect === item.id ? null : item.id
+      setEquippedEffect(next)
+      persistField('garden_effect', next)
     }
   }
 
@@ -719,9 +734,16 @@ export default function ZodiacGarden({ sign, onBack }) {
     )
   }
 
+  const EFFECT_TO_VARIANT = {
+    'efecto-hojas-cerezo': 'cerezo',
+    'efecto-hojas-otono': 'otono',
+    'efecto-hojas-magicas': 'magica',
+  }
+  const leafVariant = EFFECT_TO_VARIANT[equippedEffect] || 'verde'
+
   return (
     <div className="fixed inset-0 overflow-hidden" style={{ height: '100dvh', background: '#17101d' }}>
-      {!night && <FallingLeaves />}
+      {!night && <FallingLeaves variant={leafVariant} />}
       <div
         ref={camRef}
         className="absolute"
@@ -938,10 +960,11 @@ export default function ZodiacGarden({ sign, onBack }) {
                 {catalog.map(item => {
                   const isOwned = owned.includes(item.id)
                   const affordable = stardust >= item.price
-                  const equipable = item.kind === 'skin' || item.kind === 'fondo'
+                  const equipable = item.kind === 'skin' || item.kind === 'fondo' || item.kind === 'effect'
                   const isEquipped =
                     (item.kind === 'skin' && equippedSkin === keyOf(item)) ||
-                    (item.kind === 'fondo' && equippedBg === item.id)
+                    (item.kind === 'fondo' && equippedBg === item.id) ||
+                    (item.kind === 'effect' && equippedEffect === item.id)
                   const previewSrc = item.kind === 'skin'
                     ? `/mascotas/skins/${sign}-${keyOf(item)}.png`
                     : item.src
@@ -949,6 +972,7 @@ export default function ZodiacGarden({ sign, onBack }) {
                     item.kind === 'skin' ? ' · Skin'
                     : item.kind === 'fondo' ? ' · Mapa'
                     : item.kind === 'platform' ? ' · Plataforma'
+                    : item.kind === 'effect' ? ' · Efecto'
                     : ''
                   return (
                     <div key={item.id} className="card-zolar rounded-2xl p-3 flex items-center gap-3">
