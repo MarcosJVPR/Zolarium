@@ -139,27 +139,38 @@ function currentTransits() {
 }
 
 const LEAF_SETS = {
-  verde: ['hoja-verde-1', 'hoja-verde-2', 'hoja-verde-3'],
-  cerezo: ['hoja-cerezo-1', 'hoja-cerezo-2', 'hoja-cerezo-3'],
+  verde: ['hoja-verde-1'],
+  cerezo: ['hoja-cerezo-1', 'hoja-cerezo-2'],
   otono: ['hoja-otono-1', 'hoja-otono-2', 'hoja-otono-3'],
-  magica: ['hoja-magica-1', 'hoja-magica-2', 'hoja-magica-3'],
+  magica: ['hoja-magica-1'],
+}
+
+const LEAF_CONFIG = {
+  verde: { count: 16, min: 11, max: 18, opacity: 0.55, sway: 'wide' },
+  cerezo: { count: 12, min: 16, max: 26, opacity: 0.9, sway: 'normal' },
+  otono: { count: 11, min: 18, max: 28, opacity: 0.9, sway: 'normal' },
+  magica: { count: 16, min: 12, max: 20, opacity: 0.85, sway: 'wide' },
 }
 
 function FallingLeaves({ variant = 'verde' }) {
   const leaves = useMemo(() => {
     const set = LEAF_SETS[variant] || LEAF_SETS.verde
-    return Array.from({ length: 9 }, (_, i) => ({
+    const cfg = LEAF_CONFIG[variant] || LEAF_CONFIG.verde
+    return Array.from({ length: cfg.count }, (_, i) => ({
       id: i,
       img: set[i % set.length],
-      left: 4 + Math.random() * 90,
-      delay: Math.random() * 12,
-      dur: 10 + Math.random() * 8,
-      size: 20 + Math.random() * 14,
-      anim: i % 2 ? 'zolarLeafFall' : 'zolarLeafFallB',
+      left: 2 + Math.random() * 94,
+      delay: Math.random() * 14,
+      dur: 11 + Math.random() * 9,
+      size: cfg.min + Math.random() * (cfg.max - cfg.min),
+      opacity: cfg.opacity,
+      anim: cfg.sway === 'wide'
+        ? (i % 2 ? 'zolarLeafArcA' : 'zolarLeafArcB')
+        : (i % 2 ? 'zolarLeafFall' : 'zolarLeafFallB'),
     }))
   }, [variant])
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 30 }}>
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 30, touchAction: 'none' }}>
       {leaves.map(l => (
         <img
           key={l.id}
@@ -171,9 +182,12 @@ function FallingLeaves({ variant = 'verde' }) {
             top: '-8%',
             left: `${l.left}%`,
             width: l.size,
+            '--leaf-op': l.opacity,
             opacity: 0,
-            animation: `${l.anim} ${l.dur}s linear ${l.delay}s infinite`,
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+            pointerEvents: 'none',
+            willChange: 'transform',
+            animation: `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite`,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))',
           }}
         />
       ))}

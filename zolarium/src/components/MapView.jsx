@@ -354,12 +354,17 @@ export default function MapView({ onBack, sign = null, initialCat = 'todos' }) {
     mapRef.current?.setView([pin.lat, pin.lon], Math.max(mapRef.current.getZoom(), 16), { animate: true })
   }
 
+  const CALM_CATEGORIES = new Set([
+    'cine', 'exposiciones', 'teatro-danza', 'monumentos', 'conferencias',
+    'naturaleza-paseos', 'acupuntura', 'esoterico', 'musica',
+  ])
+
   const filtered = useMemo(() => {
     let list = plans
     if (cat === 'karaoke') list = list.filter(p => p.emoji === '🎤')
     else if (cat !== 'todos') list = list.filter(p => p.cat === cat)
     if (signFilter) list = list.filter(p => (p.signs || [p.sign]).includes(signFilter))
-    if (accessible) list = list.filter(p => p.wheelchair === true)
+    if (accessible) list = list.filter(p => p.wheelchair === true || CALM_CATEGORIES.has(p.cat))
     return list
   }, [plans, cat, signFilter, accessible])
 
