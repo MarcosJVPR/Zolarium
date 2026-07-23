@@ -139,23 +139,30 @@ function currentTransits() {
 }
 
 const LEAF_SETS = {
-  verde: ['hoja-verde-1'],
+  verde: ['hoja-verde-1', 'hoja-verde-2'],
   cerezo: ['hoja-cerezo-1', 'hoja-cerezo-2'],
   otono: ['hoja-otono-1', 'hoja-otono-2', 'hoja-otono-3'],
   magica: ['hoja-magica-1'],
 }
 
 const LEAF_CONFIG = {
-  verde: { count: 16, min: 11, max: 18, opacity: 0.55, sway: 'wide' },
-  cerezo: { count: 12, min: 16, max: 26, opacity: 0.9, sway: 'normal' },
-  otono: { count: 11, min: 18, max: 28, opacity: 0.9, sway: 'normal' },
-  magica: { count: 16, min: 12, max: 20, opacity: 0.85, sway: 'wide' },
+  verde: { count: 16, min: 11, max: 18, opacity: 0.55, sway: 'arc', twinkle: false },
+  cerezo: { count: 12, min: 16, max: 26, opacity: 0.62, sway: 'soft', twinkle: false },
+  otono: { count: 12, min: 17, max: 27, opacity: 0.6, sway: 'strong', twinkle: false },
+  magica: { count: 16, min: 12, max: 20, opacity: 0.85, sway: 'arc', twinkle: true },
+}
+
+const SWAY_ANIMS = {
+  arc: ['zolarLeafArcA', 'zolarLeafArcB'],
+  soft: ['zolarLeafFall', 'zolarLeafFallB'],
+  strong: ['zolarLeafSwayA', 'zolarLeafSwayB'],
 }
 
 function FallingLeaves({ variant = 'verde' }) {
   const leaves = useMemo(() => {
     const set = LEAF_SETS[variant] || LEAF_SETS.verde
     const cfg = LEAF_CONFIG[variant] || LEAF_CONFIG.verde
+    const anims = SWAY_ANIMS[cfg.sway] || SWAY_ANIMS.arc
     return Array.from({ length: cfg.count }, (_, i) => ({
       id: i,
       img: set[i % set.length],
@@ -164,9 +171,9 @@ function FallingLeaves({ variant = 'verde' }) {
       dur: 11 + Math.random() * 9,
       size: cfg.min + Math.random() * (cfg.max - cfg.min),
       opacity: cfg.opacity,
-      anim: cfg.sway === 'wide'
-        ? (i % 2 ? 'zolarLeafArcA' : 'zolarLeafArcB')
-        : (i % 2 ? 'zolarLeafFall' : 'zolarLeafFallB'),
+      anim: anims[i % 2],
+      twinkle: cfg.twinkle,
+      twinkleDur: 1.4 + Math.random() * 1.6,
     }))
   }, [variant])
   return (
@@ -185,9 +192,11 @@ function FallingLeaves({ variant = 'verde' }) {
             '--leaf-op': l.opacity,
             opacity: 0,
             pointerEvents: 'none',
-            willChange: 'transform',
-            animation: `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite`,
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))',
+            willChange: 'transform, filter',
+            animation: l.twinkle
+              ? `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite, zolarLeafTwinkle ${l.twinkleDur}s ease-in-out ${l.delay}s infinite`
+              : `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite`,
+            filter: l.twinkle ? undefined : 'drop-shadow(0 2px 4px rgba(0,0,0,0.25))',
           }}
         />
       ))}
