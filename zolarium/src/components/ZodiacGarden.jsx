@@ -158,7 +158,7 @@ const SWAY_ANIMS = {
   strong: ['zolarLeafSwayA', 'zolarLeafSwayB'],
 }
 
-function FallingLeaves({ variant = 'verde' }) {
+function FallingLeaves({ variant = 'verde', zoom = 1 }) {
   const leaves = useMemo(() => {
     const set = LEAF_SETS[variant] || LEAF_SETS.verde
     const cfg = LEAF_CONFIG[variant] || LEAF_CONFIG.verde
@@ -188,11 +188,12 @@ function FallingLeaves({ variant = 'verde' }) {
             position: 'absolute',
             top: '-8%',
             left: `${l.left}%`,
-            width: l.size,
+            width: l.size * zoom,
             '--leaf-op': l.opacity,
             opacity: 0,
             pointerEvents: 'none',
             willChange: 'transform, filter',
+            transition: 'width 0.15s ease-out',
             animation: l.twinkle
               ? `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite, zolarLeafTwinkle ${l.twinkleDur}s ease-in-out ${l.delay}s infinite`
               : `${l.anim} ${l.dur}s ease-in-out ${l.delay}s infinite`,
@@ -383,6 +384,16 @@ export default function ZodiacGarden({ sign, onBack }) {
     if (data?.daily_messages?.date === todayKey()) setMessages(data.daily_messages)
     setCatalog(catalogRes.data || [])
   }
+
+  const sortedCatalog = useMemo(() => {
+    const ownedSet = new Set(owned || [])
+    return [...catalog].sort((a, b) => {
+      const ao = ownedSet.has(a.id) ? 1 : 0
+      const bo = ownedSet.has(b.id) ? 1 : 0
+      if (ao !== bo) return ao - bo
+      return (a.sort ?? 999) - (b.sort ?? 999)
+    })
+  }, [catalog, owned])
 
   async function persistField(field, value) {
     const { data: { session } } = await supabase.auth.getSession()
@@ -766,7 +777,7 @@ export default function ZodiacGarden({ sign, onBack }) {
 
   return (
     <div className="fixed inset-0 overflow-hidden" style={{ height: '100dvh', background: '#17101d' }}>
-      {!night && <FallingLeaves variant={leafVariant} />}
+      {!night && <FallingLeaves variant={leafVariant} zoom={zoom} />}
       <div
         ref={camRef}
         className="absolute"
@@ -980,7 +991,7 @@ export default function ZodiacGarden({ sign, onBack }) {
                 Gana polvo estelar cuidando a {s.name}: la primera comida del día +{FEED_REWARD}⭐ y un mimo +1⭐. Con 🪴 colocas tus compras donde quieras.
               </p>
               <div className="flex flex-col gap-3">
-                {catalog.map(item => {
+                {sortedCatalog.map(item => {
                   const isOwned = owned.includes(item.id)
                   const affordable = stardust >= item.price
                   const equipable = item.kind === 'skin' || item.kind === 'fondo' || item.kind === 'effect'
